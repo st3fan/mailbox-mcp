@@ -4,17 +4,17 @@ The single mailbox-mcp Worker: it serves the MCP endpoint as streamable HTTP
 at `/mcp` (bearer token auth) **and** ingests mail — the `email()` handler
 accepts registered, enabled mailboxes routed by the catch-all Email Routing
 rule and stores them in R2. It owns the **mailbox registry** (a D1 database)
-and the `MAILBOX_STORE` R2 binding for message storage.
+and the `MAILBOX_MCP_STORE` R2 binding for message storage.
 
 ## Configuration
 
-wrangler vars: `DOMAIN`. Secrets: `MCP_AUTH_TOKEN` (bearer token clients
-must present). Bindings: `MAILBOX_STORE` (R2) and `REGISTRY` (D1). Create
+wrangler vars: `MAILBOX_MCP_DOMAIN`. Secrets: `MAILBOX_MCP_BEARER_TOKEN` (bearer token clients
+must present). Bindings: `MAILBOX_MCP_STORE` (R2) and `MAILBOX_MCP_REGISTRY` (D1). Create
 the D1 database once and apply the schema:
 
 ```sh
-npx wrangler d1 create mailbox-registry
-npx wrangler d1 migrations apply mailbox-registry
+npx wrangler d1 create mailbox-mcp-registry
+npx wrangler d1 migrations apply mailbox-mcp-registry
 ```
 
 Deployment steps are in the repository root

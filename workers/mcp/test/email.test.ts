@@ -6,10 +6,10 @@ import { FakeD1 } from "./fake-d1";
 import { FakeR2Bucket } from "./fake-r2";
 
 const env: Env = {
-  MAILBOX_STORE: new FakeR2Bucket() as unknown as R2Bucket,
-  REGISTRY: new FakeD1() as unknown as D1Database,
-  DOMAIN: "example.com",
-  MCP_AUTH_TOKEN: "unused-for-email",
+  MAILBOX_MCP_STORE: new FakeR2Bucket() as unknown as R2Bucket,
+  MAILBOX_MCP_REGISTRY: new FakeD1() as unknown as D1Database,
+  MAILBOX_MCP_DOMAIN: "example.com",
+  MAILBOX_MCP_BEARER_TOKEN: "unused-for-email",
 };
 const ctx = { waitUntil: () => {}, passThroughOnException: () => {} } as unknown as ExecutionContext;
 
@@ -42,17 +42,17 @@ function fakeEmailMessage(
 }
 
 function bucket(): FakeR2BucketType {
-  return env.MAILBOX_STORE as unknown as FakeR2BucketType;
+  return env.MAILBOX_MCP_STORE as unknown as FakeR2BucketType;
 }
 
 function registry() {
-  return (env.REGISTRY as unknown as FakeD1).rows;
+  return (env.MAILBOX_MCP_REGISTRY as unknown as FakeD1).rows;
 }
 
 beforeEach(() => {
   bucket().objects.clear();
   registry().clear();
-  (env.REGISTRY as unknown as FakeD1).lookupFails = false;
+  (env.MAILBOX_MCP_REGISTRY as unknown as FakeD1).lookupFails = false;
   rejectCalls.length = 0;
   // The happy-path test mailboxes are registered and enabled.
   registry().set("alice@example.com", { enabled: 1, created_at: "x" });
@@ -106,10 +106,10 @@ describe("email ingestion: storage", () => {
       },
     } as unknown as R2Bucket;
     const failingEnv: Env = {
-      MAILBOX_STORE: failingBucket,
-      REGISTRY: failingRegistry as unknown as D1Database,
-      DOMAIN: "example.com",
-      MCP_AUTH_TOKEN: "x",
+      MAILBOX_MCP_STORE: failingBucket,
+      MAILBOX_MCP_REGISTRY: failingRegistry as unknown as D1Database,
+      MAILBOX_MCP_DOMAIN: "example.com",
+      MAILBOX_MCP_BEARER_TOKEN: "x",
     };
 
     const message = fakeEmailMessage("sender@example.com", "bob@example.com", {}, "body");
@@ -138,7 +138,7 @@ describe("email ingestion: acceptance check", () => {
   });
 
   it("throws on registry lookup failure so delivery is deferred, not bounced", async () => {
-    (env.REGISTRY as unknown as FakeD1).lookupFails = true;
+    (env.MAILBOX_MCP_REGISTRY as unknown as FakeD1).lookupFails = true;
     const message = fakeEmailMessage("sender@example.com", "alice@example.com", {}, "body");
 
     await expect(worker.email(message, env, ctx)).rejects.toThrow("mailbox registry lookup failed");

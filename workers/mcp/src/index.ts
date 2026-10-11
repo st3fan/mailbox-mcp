@@ -4,7 +4,7 @@
 //
 // The mailbox registry (D1, shared responsibilities split across modules)
 // decides which addresses we handle; message storage lives in the
-// MAILBOX_STORE R2 bucket. There is deliberately no sending or forwarding:
+// MAILBOX_MCP_STORE R2 bucket. There is deliberately no sending or forwarding:
 // mailbox-mcp is receive-only.
 
 import { createMcpHandler } from "@modelcontextprotocol/server";
@@ -24,9 +24,9 @@ function json(body: unknown, status: number, headers?: Record<string, string>): 
   });
 }
 
-/** authorized checks the bearer token against the MCP_AUTH_TOKEN secret. */
+/** authorized checks the bearer token against the MAILBOX_MCP_BEARER_TOKEN secret. */
 function authorized(request: Request, env: Env): boolean {
-  return request.headers.get("authorization") === `Bearer ${env.MCP_AUTH_TOKEN}`;
+  return request.headers.get("authorization") === `Bearer ${env.MAILBOX_MCP_BEARER_TOKEN}`;
 }
 
 /** email is the ingestion handler: accepts mail for registered, enabled
@@ -39,7 +39,7 @@ async function ingestEmail(message: ForwardableEmailMessage, env: Env, _ctx: Exe
   // Acceptance check: only registered, enabled mailboxes receive mail.
   let mailbox;
   try {
-    mailbox = await getMailbox(env.REGISTRY, to);
+    mailbox = await getMailbox(env.MAILBOX_MCP_REGISTRY, to);
   } catch (err) {
     // Transient registry failure: throw so Email Routing defers and
     // retries delivery instead of bouncing real mail on a registry blip.
@@ -69,8 +69,8 @@ async function ingestEmail(message: ForwardableEmailMessage, env: Env, _ctx: Exe
 
   // Both objects under one put is not atomic, but the metadata is written
   // last so the message listing only shows messages whose raw bytes exist.
-  await env.MAILBOX_STORE.put(keys.raw, raw);
-  await env.MAILBOX_STORE.put(keys.metadata, JSON.stringify(metadata), {
+  await env.MAILBOX_MCP_STORE.put(keys.raw, raw);
+  await env.MAILBOX_MCP_STORE.put(keys.metadata, JSON.stringify(metadata), {
     httpMetadata: { contentType: "application/json" },
   });
 }

@@ -7,10 +7,10 @@ import { FakeR2Bucket } from "./fake-r2";
 
 const TOKEN = "test-mcp-token";
 const env: Env = {
-  MAILBOX_STORE: new FakeR2Bucket() as unknown as R2Bucket,
-  REGISTRY: new FakeD1() as unknown as D1Database,
-  DOMAIN: "example.com",
-  MCP_AUTH_TOKEN: TOKEN,
+  MAILBOX_MCP_STORE: new FakeR2Bucket() as unknown as R2Bucket,
+  MAILBOX_MCP_REGISTRY: new FakeD1() as unknown as D1Database,
+  MAILBOX_MCP_DOMAIN: "example.com",
+  MAILBOX_MCP_BEARER_TOKEN: TOKEN,
 };
 const ctx = { waitUntil: () => {}, passThroughOnException: () => {} } as unknown as ExecutionContext;
 
@@ -45,7 +45,7 @@ async function rpc(id: number, method: string, params?: unknown, token: string |
 }
 
 beforeEach(() => {
-  (env.MAILBOX_STORE as unknown as FakeR2Bucket).objects.clear();
+  (env.MAILBOX_MCP_STORE as unknown as FakeR2Bucket).objects.clear();
 });
 
 describe("auth", () => {

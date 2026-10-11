@@ -12,10 +12,10 @@ vi.mock("../src/names", () => ({ randomAddress: (domain: string) => randomAddres
 
 const TOKEN = "test-mcp-token";
 const env: Env = {
-  MAILBOX_STORE: new FakeR2Bucket() as unknown as R2Bucket,
-  REGISTRY: new FakeD1() as unknown as D1Database,
-  DOMAIN: "example.com",
-  MCP_AUTH_TOKEN: TOKEN,
+  MAILBOX_MCP_STORE: new FakeR2Bucket() as unknown as R2Bucket,
+  MAILBOX_MCP_REGISTRY: new FakeD1() as unknown as D1Database,
+  MAILBOX_MCP_DOMAIN: "example.com",
+  MAILBOX_MCP_BEARER_TOKEN: TOKEN,
 };
 const ctx = { waitUntil: () => {}, passThroughOnException: () => {} } as unknown as ExecutionContext;
 
@@ -37,13 +37,13 @@ async function callTool(id: number, name: string, args: Record<string, unknown>)
 /** registryView returns the raw rows behind the fake D1, for asserting
  * persistence directly. */
 function registry() {
-  return (env.REGISTRY as unknown as FakeD1).rows;
+  return (env.MAILBOX_MCP_REGISTRY as unknown as FakeD1).rows;
 }
 
 /** putMessage stores a message's raw and metadata objects in the fake bucket,
  * like the email worker does. */
 async function putMessage(mailbox: string, id: string, subject: string, raw: string) {
-  const bucket = env.MAILBOX_STORE as unknown as FakeR2Bucket;
+  const bucket = env.MAILBOX_MCP_STORE as unknown as FakeR2Bucket;
   await bucket.put(`${mailbox}/${id}.eml`, raw);
   await bucket.put(
     `${mailbox}/${id}.json`,
@@ -57,7 +57,7 @@ async function putMessage(mailbox: string, id: string, subject: string, raw: str
 
 beforeEach(() => {
   randomAddress.mockReset();
-  (env.REGISTRY as unknown as FakeD1).rows.clear();
+  (env.MAILBOX_MCP_REGISTRY as unknown as FakeD1).rows.clear();
 });
 
 describe("create_mailbox", () => {
@@ -96,7 +96,7 @@ describe("create_random_mailbox", () => {
   });
 
   it("retries with a new name when the generated address already exists", async () => {
-    (env.REGISTRY as unknown as FakeD1).rows.set("taken@example.com", { enabled: 1, created_at: "x" });
+    (env.MAILBOX_MCP_REGISTRY as unknown as FakeD1).rows.set("taken@example.com", { enabled: 1, created_at: "x" });
     randomAddress.mockReturnValueOnce("taken@example.com").mockReturnValueOnce("fresh@example.com");
 
     const { isError, text } = await callTool(6, "create_random_mailbox", {});
@@ -105,7 +105,7 @@ describe("create_random_mailbox", () => {
   });
 
   it("gives up after three conflicts", async () => {
-    (env.REGISTRY as unknown as FakeD1).rows.set("taken@example.com", { enabled: 1, created_at: "x" });
+    (env.MAILBOX_MCP_REGISTRY as unknown as FakeD1).rows.set("taken@example.com", { enabled: 1, created_at: "x" });
     randomAddress.mockReturnValue("taken@example.com");
 
     const { isError, text } = await callTool(7, "create_random_mailbox", {});
@@ -140,7 +140,7 @@ describe("delete_mailbox", () => {
     expect(JSON.parse(text)).toEqual({ address: "alpha@example.com", deleted: true });
     expect(registry().has("alpha@example.com")).toBe(false);
 
-    const bucket = env.MAILBOX_STORE as unknown as FakeR2Bucket;
+    const bucket = env.MAILBOX_MCP_STORE as unknown as FakeR2Bucket;
     expect(bucket.keys().filter((k) => k.startsWith("alpha@example.com/"))).toEqual([]);
     expect(bucket.keys().filter((k) => k.startsWith("beta@example.com/"))).toHaveLength(2);
   });

@@ -32,7 +32,7 @@ function notFound(kind: string, id: string, mailbox: string): Error {
 
 /** requireMetadata fetches a message's metadata or throws a not-found error. */
 async function requireMetadata(env: Env, mailbox: string, id: string): Promise<MessageMetadata> {
-  const metadata = await getMetadata(env.MAILBOX_STORE, mailbox, id);
+  const metadata = await getMetadata(env.MAILBOX_MCP_STORE, mailbox, id);
   if (metadata === null) {
     throw notFound("message", id, mailbox);
   }
@@ -44,7 +44,7 @@ export function registerMessageTools(server: McpServer, env: Env): void {
   server.registerTool(
     "list_messages",
     {
-      description: `List the messages of a mailbox on ${env.DOMAIN}, newest first. Returns metadata and a page token for the next page. Never marks messages read.`,
+      description: `List the messages of a mailbox on ${env.MAILBOX_MCP_DOMAIN}, newest first. Returns metadata and a page token for the next page. Never marks messages read.`,
       inputSchema: {
         address: z.string().describe("the mailbox address to list messages for"),
         pageToken: z.string().optional().describe("page token from a previous list_messages result, to get the next page"),
@@ -52,7 +52,7 @@ export function registerMessageTools(server: McpServer, env: Env): void {
     },
     async ({ address, pageToken }) => {
       const mailbox = validateAddress(address, env);
-      const page = await listMetadata(env.MAILBOX_STORE, mailbox, pageToken, LIST_LIMIT);
+      const page = await listMetadata(env.MAILBOX_MCP_STORE, mailbox, pageToken, LIST_LIMIT);
       return text({ messages: page.messages, nextPageToken: page.nextCursor ?? undefined });
     },
   );
@@ -60,7 +60,7 @@ export function registerMessageTools(server: McpServer, env: Env): void {
   server.registerTool(
     "read_message",
     {
-      description: `Read one message of a mailbox on ${env.DOMAIN}: its metadata and raw content. Marks the message as read automatically.`,
+      description: `Read one message of a mailbox on ${env.MAILBOX_MCP_DOMAIN}: its metadata and raw content. Marks the message as read automatically.`,
       inputSchema: {
         address: z.string().describe("the mailbox address the message belongs to"),
         id: z.string().describe("the message id, from a list_messages result"),
@@ -72,18 +72,18 @@ export function registerMessageTools(server: McpServer, env: Env): void {
       if (messageId === "") {
         throw new Error("id is required");
       }
-      const stored = await getMetadata(env.MAILBOX_STORE, mailbox, messageId);
+      const stored = await getMetadata(env.MAILBOX_MCP_STORE, mailbox, messageId);
       if (stored === null) {
         throw notFound("message", messageId, mailbox);
       }
-      const raw = await getRaw(env.MAILBOX_STORE, mailbox, messageId);
+      const raw = await getRaw(env.MAILBOX_MCP_STORE, mailbox, messageId);
       if (raw === null) {
         // Metadata without raw bytes should not happen (the email worker
         // writes raw first); treat it as missing rather than returning an
         // empty message.
         throw notFound("message", messageId, mailbox);
       }
-      const updated = await patchMetadata(env.MAILBOX_STORE, stored, { read: true });
+      const updated = await patchMetadata(env.MAILBOX_MCP_STORE, stored, { read: true });
       return text({ message: updated, raw });
     },
   );
@@ -91,7 +91,7 @@ export function registerMessageTools(server: McpServer, env: Env): void {
   server.registerTool(
     "mark_message_read",
     {
-      description: `Mark a message of a mailbox on ${env.DOMAIN} as read without re-reading it.`,
+      description: `Mark a message of a mailbox on ${env.MAILBOX_MCP_DOMAIN} as read without re-reading it.`,
       inputSchema: {
         address: z.string().describe("the mailbox address the message belongs to"),
         id: z.string().describe("the message id, from a list_messages result"),
@@ -104,7 +104,7 @@ export function registerMessageTools(server: McpServer, env: Env): void {
         throw new Error("id is required");
       }
       const metadata = await requireMetadata(env, mailbox, messageId);
-      const updated = await patchMetadata(env.MAILBOX_STORE, metadata, { read: true });
+      const updated = await patchMetadata(env.MAILBOX_MCP_STORE, metadata, { read: true });
       return text({ message: updated });
     },
   );
@@ -112,7 +112,7 @@ export function registerMessageTools(server: McpServer, env: Env): void {
   server.registerTool(
     "archive_message",
     {
-      description: `Archive a message of a mailbox on ${env.DOMAIN}.`,
+      description: `Archive a message of a mailbox on ${env.MAILBOX_MCP_DOMAIN}.`,
       inputSchema: {
         address: z.string().describe("the mailbox address the message belongs to"),
         id: z.string().describe("the message id, from a list_messages result"),
@@ -125,7 +125,7 @@ export function registerMessageTools(server: McpServer, env: Env): void {
         throw new Error("id is required");
       }
       const metadata = await requireMetadata(env, mailbox, messageId);
-      const updated = await patchMetadata(env.MAILBOX_STORE, metadata, { archived: true });
+      const updated = await patchMetadata(env.MAILBOX_MCP_STORE, metadata, { archived: true });
       return text({ message: updated });
     },
   );
@@ -133,7 +133,7 @@ export function registerMessageTools(server: McpServer, env: Env): void {
   server.registerTool(
     "delete_message",
     {
-      description: `Delete a message of a mailbox on ${env.DOMAIN}. Permanent.`,
+      description: `Delete a message of a mailbox on ${env.MAILBOX_MCP_DOMAIN}. Permanent.`,
       inputSchema: {
         address: z.string().describe("the mailbox address the message belongs to"),
         id: z.string().describe("the message id, from a list_messages result"),
@@ -146,7 +146,7 @@ export function registerMessageTools(server: McpServer, env: Env): void {
         throw new Error("id is required");
       }
       await requireMetadata(env, mailbox, messageId);
-      await deleteMessage(env.MAILBOX_STORE, mailbox, messageId);
+      await deleteMessage(env.MAILBOX_MCP_STORE, mailbox, messageId);
       return text({ deleted: true });
     },
   );

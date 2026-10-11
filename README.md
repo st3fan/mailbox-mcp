@@ -67,10 +67,10 @@ two of them need your attention — the rest have sensible defaults:
 
 | Binding | Kind | Required | Meaning |
 |---|---|---|---|
-| `DOMAIN` | var | **Yes** | The single (dedicated) email domain to manage, e.g. `example.com`. |
-| `MCP_AUTH_TOKEN` | secret | **Yes** | Bearer token MCP clients must present at `/mcp`. Generate a random string, e.g. `openssl rand -hex 32`. |
-| `MAILBOX_STORE` | R2 binding | No | The bucket received mail is stored in. Has a default: it is provisioned automatically as `mailbox-mcp-mailbox-store` (the button creates it; CLI: `wrangler r2 bucket create mailbox-mcp-mailbox-store`). Only change this if you want a custom bucket name. |
-| `REGISTRY` | D1 binding | No | The mailbox registry. Has a default: it is provisioned automatically as `mailbox-registry`, with the schema applied by the deploy script. Only change this if you want a custom database name. |
+| `MAILBOX_MCP_DOMAIN` | var | **Yes** | The single (dedicated) email domain to manage, e.g. `example.com`. |
+| `MAILBOX_MCP_BEARER_TOKEN` | secret | **Yes** | Bearer token MCP clients must present at `/mcp`. Generate a random string, e.g. `openssl rand -hex 32`. |
+| `MAILBOX_MCP_STORE` | R2 binding | No | The bucket received mail is stored in. Has a default: it is provisioned automatically as `mailbox-mcp-store` (the button creates it; CLI: `wrangler r2 bucket create mailbox-mcp-store`). Only change this if you want a custom bucket name. |
+| `MAILBOX_MCP_REGISTRY` | D1 binding | No | The mailbox registry. Has a default: it is provisioned automatically as `mailbox-mcp-registry`, with the schema applied by the deploy script. Only change this if you want a custom database name. |
 
 **No Cloudflare API token is needed**: mailboxes are
 registry entries, and the catch-all routing rule is configured once, by
@@ -81,7 +81,7 @@ hand, in the dashboard.
 ### One-click install (Deploy to Cloudflare)
 
 Click the button, connect your GitHub account, pick your dedicated email
-domain (`DOMAIN`) and a bearer token (`MCP_AUTH_TOKEN` — generate a random
+domain (`MAILBOX_MCP_DOMAIN`) and a bearer token (`MAILBOX_MCP_BEARER_TOKEN` — generate a random
 string, e.g. `openssl rand -hex 32`): the R2 bucket and D1 registry are
 provisioned automatically, the registry schema is applied by the deploy
 script, and the Worker is deployed. The repo is cloned into your GitHub
@@ -102,13 +102,13 @@ Then connect your MCP client (see [Using from an MCP client](#using-from-an-mcp-
 ### CLI install
 
 ```sh
-npx wrangler r2 bucket create mailbox-mcp-mailbox-store   # once
-npx wrangler d1 create mailbox-registry                   # once; paste the ID
+npx wrangler r2 bucket create mailbox-mcp-store   # once
+npx wrangler d1 create mailbox-mcp-registry                   # once; paste the ID
                                                           # into workers/mcp/wrangler.toml
 
 cd workers/mcp
 npm install
-npx wrangler secret put MCP_AUTH_TOKEN
+npx wrangler secret put MAILBOX_MCP_BEARER_TOKEN
 npm run deploy                                            # applies migrations, then deploys
 ```
 
@@ -117,7 +117,7 @@ catch-all rule must point at the `mailbox-mcp` Worker (see the one-click
 checklist above).
 
 **Security note:** `/mcp` is protected only by the bearer token. Keep
-`MCP_AUTH_TOKEN` private; anyone holding it can manage mailboxes and read
+`MAILBOX_MCP_BEARER_TOKEN` private; anyone holding it can manage mailboxes and read
 stored mail.
 
 ## Update
@@ -151,8 +151,8 @@ bucket** — remove those explicitly, or your stored mail stays behind:
    ```
 
    which runs, with a confirmation prompt for each:
-   `npx wrangler delete`, `npx wrangler d1 delete mailbox-registry`, and
-   `npx wrangler r2 bucket delete mailbox-mcp-mailbox-store`.
+   `npx wrangler delete`, `npx wrangler d1 delete mailbox-mcp-registry`, and
+   `npx wrangler r2 bucket delete mailbox-mcp-store`.
 
 ## Using from an MCP client
 
@@ -164,7 +164,7 @@ client that supports remote servers:
   "mcpServers": {
     "mailbox-mcp": {
       "url": "https://mailbox-mcp.<account>.workers.dev/mcp",
-      "headers": { "Authorization": "Bearer <MCP_AUTH_TOKEN>" }
+      "headers": { "Authorization": "Bearer <MAILBOX_MCP_BEARER_TOKEN>" }
     }
   }
 }

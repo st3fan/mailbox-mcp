@@ -27,7 +27,7 @@ working conventions.
    `npx wrangler ...` instead.
 
 2. **Domain on Cloudflare.** The (dedicated) email domain must be a zone in
-   your Cloudflare account, and set as `DOMAIN` in
+   your Cloudflare account, and set as `MAILBOX_MCP_DOMAIN` in
    `workers/mcp/wrangler.toml`.
 3. **Enable Email Routing.** Dashboard → your domain → **Email → Email
    Routing** → enable. Cloudflare adds the required MX and SPF records.
@@ -38,27 +38,27 @@ working conventions.
    apply the schema migration:
 
    ```sh
-   npx wrangler r2 bucket create mailbox-mcp-mailbox-store
-   npx wrangler d1 create mailbox-registry
+   npx wrangler r2 bucket create mailbox-mcp-store
+   npx wrangler d1 create mailbox-mcp-registry
    ```
 
    Paste the database ID into `workers/mcp/wrangler.toml`, then:
 
    ```sh
    cd workers/mcp && npm install
-   npx wrangler d1 migrations apply REGISTRY --remote
+   npx wrangler d1 migrations apply MAILBOX_MCP_REGISTRY --remote
    ```
 
 2. **Deploy** the Worker and set its one secret:
 
    ```sh
-   npx wrangler secret put MCP_AUTH_TOKEN    # generate e.g. with: openssl rand -hex 32
+   npx wrangler secret put MAILBOX_MCP_BEARER_TOKEN    # generate e.g. with: openssl rand -hex 32
    npm run deploy                            # applies pending migrations, then deploys
    ```
 
    The Worker then serves MCP as streamable HTTP at
    `https://mailbox-mcp.<account>.workers.dev/mcp`. The endpoint is
-   protected by the bearer token only — keep `MCP_AUTH_TOKEN` private.
+   protected by the bearer token only — keep `MAILBOX_MCP_BEARER_TOKEN` private.
 
 ## 3. Catch-all routing rule
 
@@ -80,7 +80,7 @@ the JSON form):
   "mcpServers": {
     "mailbox-mcp": {
       "url": "https://mailbox-mcp.<account>.workers.dev/mcp",
-      "headers": { "Authorization": "Bearer <MCP_AUTH_TOKEN>" }
+      "headers": { "Authorization": "Bearer <MAILBOX_MCP_BEARER_TOKEN>" }
     }
   }
 }
@@ -129,8 +129,8 @@ bucket** — remove those explicitly, or your stored mail stays behind:
 3. Remove the resources (permanent — this deletes all stored mail):
 
    ```sh
-   npx wrangler d1 delete mailbox-registry
-   npx wrangler r2 bucket delete mailbox-mcp-mailbox-store
+   npx wrangler d1 delete mailbox-mcp-registry
+   npx wrangler r2 bucket delete mailbox-mcp-store
    ```
 
 Or run `npm run uninstall` from `workers/mcp`, which performs steps 2 and 3
@@ -144,7 +144,7 @@ mailbox. Migrate in this order:
 1. Create the D1 registry and apply the migration (section 2, step 1).
 2. **Seed the registry with every existing mailbox** before deploying the
    acceptance-checking Worker — use `workers/mcp/seed.sql` as a template
-   (`npx wrangler d1 execute mailbox-registry --remote --file seed.sql`).
+   (`npx wrangler d1 execute mailbox-mcp-registry --remote --file seed.sql`).
    Unseeded addresses will bounce once the new Worker is live.
 3. Deploy the new Worker (section 2, step 2).
 4. Configure the catch-all rule (section 3).
