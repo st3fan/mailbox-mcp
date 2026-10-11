@@ -1,0 +1,9 @@
+# Local credentials used to run the MCP server (see DEVELOPING.md)
+.env
+
+# Go build/test artifacts
+/mailbox-mcp
+*.exe
+*.test
+*.out
+coverage.txt
