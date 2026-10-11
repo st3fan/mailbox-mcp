@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -29,6 +31,10 @@ const (
 	// EnvTransport selects the MCP transport.
 	EnvTransport = "MAILBOX_MCP_TRANSPORT"
 
+	// EnvHTTPAddr is the listen address (host:port) of the HTTP transport.
+	// The MCP endpoint is served at /mcp on it.
+	EnvHTTPAddr = "MAILBOX_MCP_HTTP_ADDR"
+
 	// EnvMessagesAPIURL is the base URL of the messages API worker that serves
 	// the mail the email worker stores in R2, for example
 	// "https://messages.example.com".
@@ -43,13 +49,23 @@ const (
 	// DefaultTransport is the transport used when EnvTransport is unset.
 	DefaultTransport = "stdio"
 
+	// DefaultHTTPAddr is the listen address used by the HTTP transport when
+	// EnvHTTPAddr is unset. It binds to localhost: the MCP endpoint has no
+	// authentication, so it must not be reachable from other hosts unless the
+	// operator explicitly changes the address.
+	DefaultHTTPAddr = "localhost:8080"
+
 	// dotenvFile is read from the working directory to fill configuration
 	// variables that are not set in the environment.
 	dotenvFile = ".env"
 )
 
-// TransportStdio is the only supported transport in this iteration.
+// TransportStdio is the MCP transport over stdin/stdout, the default.
 const TransportStdio = "stdio"
+
+// TransportHTTP is the MCP transport as streamable HTTP at /mcp. The SSE
+// transport is deliberately not supported: it is deprecated in the MCP spec.
+const TransportHTTP = "http"
 
 // Config is the validated server configuration.
 type Config struct {
@@ -64,6 +80,10 @@ type Config struct {
 
 	// Transport is the MCP transport to serve on.
 	Transport string
+
+	// HTTPAddr is the listen address (host:port) of the HTTP transport. The
+	// MCP endpoint is served at /mcp on it.
+	HTTPAddr string
 
 	// MessagesAPIURL is the base URL of the messages API worker.
 	MessagesAPIURL string
@@ -95,6 +115,7 @@ func Load() (Config, error) {
 		Domain:             value(EnvDomain),
 		EmailWorker:        value(EnvEmailWorker),
 		Transport:          value(EnvTransport),
+		HTTPAddr:           value(EnvHTTPAddr),
 		MessagesAPIURL:     value(EnvMessagesAPIURL),
 		MessagesAPIToken:   value(EnvMessagesAPIToken),
 	}
@@ -116,8 +137,15 @@ func Load() (Config, error) {
 	}
 	switch cfg.Transport {
 	case TransportStdio:
+	case TransportHTTP:
+		if cfg.HTTPAddr == "" {
+			cfg.HTTPAddr = DefaultHTTPAddr
+		}
+		if err := validateHTTPAddr(cfg.HTTPAddr); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", EnvHTTPAddr, err))
+		}
 	default:
-		errs = append(errs, fmt.Errorf("%s: unknown transport %q (supported: %s)", EnvTransport, cfg.Transport, TransportStdio))
+		errs = append(errs, fmt.Errorf("%s: unknown transport %q (supported: %s, %s)", EnvTransport, cfg.Transport, TransportStdio, TransportHTTP))
 	}
 
 	// The messages API is required: the message tools need it to serve mail.
@@ -147,6 +175,19 @@ func validateBaseURL(raw string) error {
 	}
 	if parsed.Host == "" {
 		return fmt.Errorf("%q is not a valid base URL: missing host", raw)
+	}
+	return nil
+}
+
+// validateHTTPAddr checks that an HTTP listen address is host:port with a
+// numeric port. An empty host (":8080") binds all interfaces and is allowed.
+func validateHTTPAddr(addr string) error {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("%q is not a valid listen address: %w (expected host:port, e.g. %s)", addr, err, DefaultHTTPAddr)
+	}
+	if _, err := strconv.Atoi(port); err != nil {
+		return fmt.Errorf("%q is not a valid listen address: port %q is not numeric", addr, port)
 	}
 	return nil
 }
