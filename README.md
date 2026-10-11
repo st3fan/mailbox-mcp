@@ -3,23 +3,29 @@
 mailbox-mcp is an MCP server for **temporary email addresses that actually
 receive mail**, running entirely on Cloudflare. With a domain onboarded to
 Cloudflare Email Routing, it creates and manages mailboxes — addresses whose
-mail is routed by an Email Routing rule to an Email Worker and stored in R2 —
-and lets agents read and manage the mail they receive.
+mail is routed by a single catch-all Email Routing rule to an Email Worker
+and stored in R2 — and lets agents read and manage the mail they receive.
 
 The project is about **creating temporary email addresses, receiving email,
 and managing the mailbox**. It deliberately has no functionality to send
 email.
+
+> **Use a dedicated domain.** The catch-all rule routes mail for *every*
+> address on the domain to the worker, and unknown addresses are bounced.
+> The domain should therefore be dedicated to mailbox-mcp — a domain shared
+> with personal or other mail is not suitable.
 
 ## Architecture
 
 Everything runs on Cloudflare as two Workers with different responsibilities:
 
 1. **`workers/email-worker`** (`mailbox-mcp-email-worker`) — receives mail
-   routed by Email Routing rules and stores it in R2.
+   routed by the catch-all rule, accepts only registered, enabled mailboxes
+   (via the shared mailbox registry), and stores accepted mail in R2.
 2. **`workers/mcp`** (`mailbox-mcp`) — serves the MCP endpoint as streamable
-   HTTP at `/mcp` (bearer-token auth), owns message storage (direct R2
-   access), and manages mailboxes by talking to Cloudflare's Email Routing
-   API with a scoped token.
+   HTTP at `/mcp` (bearer-token auth), owns the mailbox registry (a D1
+   database shared with the email worker) and message storage (direct R2
+   access).
 
 Agents connect to `https://mailbox-mcp.<account>.workers.dev/mcp` as a
 remote MCP server.
@@ -28,12 +34,12 @@ remote MCP server.
 
 | Tool | Description |
 |---|---|
-| `create_mailbox` | Create a mailbox: an Email Routing rule routing the address to the Email Worker. |
+| `create_mailbox` | Create a mailbox: register the address. It immediately receives mail. |
 | `create_random_mailbox` | Create a mailbox with a generated address like `john.smith@domain`. |
-| `list_mailboxes` | List mailboxes managed by mailbox-mcp on the configured domain. |
-| `delete_mailbox` | Delete a mailbox by address. Permanent. |
-| `enable_mailbox` | Re-activate a mailbox: mail to the address is routed again. |
-| `disable_mailbox` | De-activate a mailbox: it keeps existing but mail is no longer routed. |
+| `list_mailboxes` | List the registered mailboxes, sorted by address. |
+| `delete_mailbox` | Delete a mailbox: the address no longer receives mail and all of its stored messages are permanently deleted. |
+| `enable_mailbox` | Re-activate a mailbox: mail to the address is accepted again. |
+| `disable_mailbox` | De-activate a mailbox: incoming mail is bounced; the mailbox and its stored messages remain. |
 | `list_messages` | List a mailbox's messages, newest first, paginated. Never marks messages read. |
 | `read_message` | Read one message: metadata and raw content. Marks the message as read automatically. |
 | `mark_message_read` | Mark a message as read without re-reading it. |
@@ -41,8 +47,8 @@ remote MCP server.
 | `delete_message` | Delete a message. Permanent. |
 
 Addresses outside the configured domain are rejected locally, before any
-storage or API access. Other routing rules that may exist on the domain
-(forwarding rules, catch-alls) are never listed or deleted.
+storage access; mail to unknown or disabled addresses on the domain is
+bounced by the email worker.
 
 ## Agent guidance
 
@@ -57,28 +63,37 @@ that walk an agent through those flows. The wording is reviewed in
 
 ## Configuration
 
-The MCP worker is configured with wrangler vars and secrets:
+The MCP worker is configured with wrangler vars, secrets, and bindings:
 
 | Binding | Kind | Meaning |
 |---|---|---|
-| `DOMAIN` | var | The single email domain to manage, e.g. `outofscope.party`. |
-| `EMAIL_WORKER` | var | Name of the Email Worker mailboxes route to. |
+| `DOMAIN` | var | The single (dedicated) email domain to manage, e.g. `outofscope.party`. |
 | `MAILBOX_STORE` | R2 binding | The bucket the email worker stores mail in. |
-| `CLOUDFLARE_API_TOKEN` | secret | API token with **Zone → Email Routing Rules → Edit** permission for the domain's zone. |
+| `REGISTRY` | D1 binding | The mailbox registry, shared with the email worker. |
 | `MCP_AUTH_TOKEN` | secret | Bearer token MCP clients must present at `/mcp`. |
+
+The email worker shares the R2 bucket and the D1 registry (see its
+`wrangler.toml`). **No Cloudflare API token is needed**: mailboxes are
+registry entries, and the catch-all routing rule is configured once, by
+hand, in the dashboard.
 
 ## Deploying
 
 ```sh
+npx wrangler r2 bucket create mailbox-mcp-mailbox-store   # once
+npx wrangler d1 create mailbox-registry                   # once; paste the ID
+                                                          # into both wrangler.toml files
+npx wrangler d1 migrations apply mailbox-registry         # once, from workers/mcp
+
 cd workers/mcp
 npm install
-npx wrangler secret put CLOUDFLARE_API_TOKEN
 npx wrangler secret put MCP_AUTH_TOKEN
 npm run deploy
 ```
 
 The Email Worker deploys the same way from `workers/email-worker` (see its
-README for the R2 bucket setup).
+README), and the catch-all rule is configured once in the dashboard
+(Email Routing → Routing Rules → Catch-all address → **Send to a Worker**).
 
 **Security note:** `/mcp` is protected only by the bearer token. Keep
 `MCP_AUTH_TOKEN` private; anyone holding it can manage mailboxes and read

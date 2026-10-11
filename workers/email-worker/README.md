@@ -1,16 +1,18 @@
 # mailbox-mcp-email-worker
 
-Cloudflare Email Worker for [mailbox-mcp](../../): it receives mail routed to
-mailbox-mcp mailbox addresses and stores each message in an R2 bucket. There is
-deliberately no sending or forwarding; mailbox-mcp is receive-only.
+Accepts mail for registered mailboxes and stores it in R2. A single
+**catch-all Email Routing rule** ("Send to a Worker" → this worker,
+configured once in the dashboard) routes every address on the domain here;
+the **mailbox registry** (a D1 database shared with the
+[MCP worker](../mcp)) decides which addresses we handle: registered and
+enabled mailboxes are stored, unknown or disabled addresses are rejected
+with an SMTP bounce. The domain should be dedicated to mailbox-mcp.
 
-Mail reaches this worker because mailbox-mcp's routing rules (one per mailbox
-address) route mail to the worker named in this directory's `wrangler.toml`.
-No catch-all rule is used.
+There is deliberately no sending or forwarding; mailbox-mcp is receive-only.
 
 ## Storage layout
 
-Each received message is stored in the `MAILBOX_STORE` R2 bucket under the
+Each accepted message is stored in the `MAILBOX_STORE` R2 bucket under the
 recipient mailbox's prefix:
 
 ```
@@ -54,7 +56,11 @@ Metadata JSON shape (this is what the messages API serves for listings):
    npx wrangler r2 bucket create mailbox-mcp-mailbox-store
    ```
 
-2. **Deploy** from this directory (deploys the worker named
+2. **Registry binding.** Set the shared D1 database ID in this directory's
+   `wrangler.toml` (created as described in [the MCP worker's
+   README](../mcp/README.md)).
+
+3. **Deploy** from this directory (deploys the worker named
    `mailbox-mcp-email-worker`):
 
    ```sh
@@ -62,20 +68,16 @@ Metadata JSON shape (this is what the messages API serves for listings):
    npm run deploy
    ```
 
-3. **Point mailboxes at it.** Nothing to do manually: mailbox-mcp routing
-   rules route mail to this worker by name (see the `MAILBOX_MCP_EMAIL_WORKER`
-   setting of the MCP server).
-
-This replaces the placeholder hello-world worker from the iteration 1
-runbook: deploy this worker instead of creating a placeholder.
+4. **Catch-all rule.** In the dashboard (Email Routing → Routing Rules →
+   Catch-all address → Edit): set the action to **Send to a Worker** and
+   select `mailbox-mcp-email-worker`. This is a one-time, manual step — the
+   worker accepts only registered, enabled mailboxes and bounces everything
+   else.
 
 ## Development
 
 ```sh
 npm install
-npm run test        # vitest: key building, metadata, and the email handler
+npm run test        # vitest: key building, metadata, acceptance check, and the email handler
 npm run typecheck   # tsc --noEmit
 ```
-
-The messages API worker that reads this bucket lives in
-[`../messages-api`](../messages-api).
