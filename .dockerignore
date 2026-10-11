@@ -1,0 +1,6 @@
+.git
+.agents
+.env
+*.md
+Dockerfile
+.dockerignore
