@@ -1,6 +1,7 @@
 // Package mailboxes implements the mailbox-mcp MCP tools for managing
 // mailboxes on a Cloudflare domain: creating, listing, and deleting Email
-// Routing rules that route mail to the configured Email Worker.
+// Routing rules that route mail to the configured Email Worker, and reading
+// and managing the messages those mailboxes receive.
 package mailboxes
 
 import (

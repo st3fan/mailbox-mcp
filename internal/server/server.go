@@ -10,6 +10,7 @@ import (
 	"github.com/st3fan/mailbox-mcp/internal/cloudflare"
 	"github.com/st3fan/mailbox-mcp/internal/config"
 	"github.com/st3fan/mailbox-mcp/internal/mailboxes"
+	"github.com/st3fan/mailbox-mcp/internal/messages"
 )
 
 const (
@@ -38,6 +39,7 @@ func Run(cfg config.Config) error {
 
 	srv := mcp.NewServer(&mcp.Implementation{Name: name, Version: version}, nil)
 	mailboxes.Register(srv, cfg, zoneID, client)
+	mailboxes.RegisterMessages(srv, messages.New(cfg.MessagesAPIURL, cfg.MessagesAPIToken), cfg.Domain)
 
 	return srv.Run(ctx, &mcp.StdioTransport{})
 }
