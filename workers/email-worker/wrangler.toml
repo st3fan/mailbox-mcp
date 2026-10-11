@@ -2,11 +2,18 @@ name = "mailbox-mcp-email-worker"
 main = "src/index.ts"
 compatibility_date = "2025-10-01"
 
-# Email Routing rules created by mailbox-mcp route mail for individual mailbox
-# addresses to this worker; no catch-all is used.
-# The stored mail is read back through the messages API worker (see
-# ../messages-api), which binds to the same bucket.
+# A catch-all Email Routing rule ("Send to a Worker" → this worker, configured
+# once in the dashboard) routes every address on the domain here; the mailbox
+# registry decides which addresses we handle. The stored mail lives in the
+# MAILBOX_STORE R2 bucket, shared with the MCP worker.
 
 [[r2_buckets]]
 binding = "MAILBOX_STORE"
 bucket_name = "mailbox-mcp-mailbox-store"
+
+# Mailbox registry, shared with workers/mcp. Create the database once, then
+# paste its ID here (see workers/mcp/wrangler.toml):
+[[d1_databases]]
+binding = "REGISTRY"
+database_name = "mailbox-registry"
+database_id = "REPLACE_AFTER_D1_CREATE"

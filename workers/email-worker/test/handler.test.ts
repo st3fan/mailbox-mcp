@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import handler from "../src/index";
+import { FakeD1 } from "./fake-d1";
 import type { Env } from "../src/index";
 
 // A minimal in-memory R2 bucket stub covering what the email handler uses.
@@ -19,6 +20,8 @@ class FakeR2Bucket {
 
 // Builds a fake EmailMessage like the workers runtime provides: envelope
 // from/to plus a Headers object and a raw stream.
+const rejectCalls: string[] = [];
+
 function fakeEmailMessage(from: string, to: string, headers: Record<string, string>, raw: string) {
   const bytes = new TextEncoder().encode(raw);
   return {
@@ -27,14 +30,21 @@ function fakeEmailMessage(from: string, to: string, headers: Record<string, stri
     headers: new Headers(headers),
     raw: new Response(bytes).body as ReadableStream,
     rawSize: bytes.byteLength,
+    setReject: (reason: string) => {
+      rejectCalls.push(reason);
+    },
   };
 }
 
-const env: Env = { MAILBOX_STORE: new FakeR2Bucket() as unknown as R2Bucket };
+const env: Env = { MAILBOX_STORE: new FakeR2Bucket() as unknown as R2Bucket, REGISTRY: new FakeD1() as unknown as D1Database };
 const ctx = { waitUntil: () => {}, passThroughOnException: () => {} } as unknown as ExecutionContext;
 
 beforeEach(() => {
   (env.MAILBOX_STORE as unknown as FakeR2Bucket).objects.clear();
+  (env.REGISTRY as unknown as FakeD1).rows.clear();
+  // The handler test mailboxes are registered and enabled.
+  (env.REGISTRY as unknown as FakeD1).rows.set("alice@outofscope.party", { enabled: 1, created_at: "x" });
+  (env.REGISTRY as unknown as FakeD1).rows.set("bob@outofscope.party", { enabled: 1, created_at: "x" });
 });
 
 describe("email handler", () => {
@@ -46,6 +56,7 @@ describe("email handler", () => {
       "raw message body",
     );
     await handler.email(message as unknown as ForwardableEmailMessage, env, ctx);
+    expect(rejectCalls).toEqual([]);
 
     const bucket = env.MAILBOX_STORE as unknown as FakeR2Bucket;
     const keys = [...bucket.objects.keys()].sort();
@@ -82,7 +93,9 @@ describe("email handler", () => {
         return Promise.resolve();
       },
     } as unknown as R2Bucket;
-    const failingEnv: Env = { MAILBOX_STORE: failingBucket };
+    const failingRegistry = new FakeD1();
+    failingRegistry.rows.set("bob@outofscope.party", { enabled: 1, created_at: "x" });
+    const failingEnv: Env = { MAILBOX_STORE: failingBucket, REGISTRY: failingRegistry as unknown as D1Database };
 
     const message = fakeEmailMessage("sender@example.com", "bob@outofscope.party", {}, "body");
     await expect(handler.email(message as unknown as ForwardableEmailMessage, failingEnv, ctx)).rejects.toThrow("storage down");
