@@ -21,9 +21,17 @@ type fakeClient struct {
 	listErr   error
 	createErr error
 	deleteErr error
+	updateErr error
 
 	createdAddresses []string
 	deletedRuleIDs   []string
+	updates          []update
+}
+
+// update records one UpdateRuleStatus call.
+type update struct {
+	ruleID  string
+	enabled bool
 }
 
 func (f *fakeClient) ListRules(ctx context.Context, zoneID string) ([]cloudflare.Rule, error) {
@@ -55,6 +63,14 @@ func (f *fakeClient) DeleteRule(ctx context.Context, zoneID, ruleID string) erro
 		return f.deleteErr
 	}
 	f.deletedRuleIDs = append(f.deletedRuleIDs, ruleID)
+	return nil
+}
+
+func (f *fakeClient) UpdateRuleStatus(ctx context.Context, zoneID, ruleID string, enabled bool) error {
+	if f.updateErr != nil {
+		return f.updateErr
+	}
+	f.updates = append(f.updates, update{ruleID, enabled})
 	return nil
 }
 
@@ -321,5 +337,107 @@ func TestValidateAddress(t *testing.T) {
 				t.Errorf("validateAddress(%q) error = %q, want it to contain %q", tt.address, err.Error(), tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestEnableDisableMailbox(t *testing.T) {
+	adaRule := cloudflare.Rule{
+		ID:       "rule-ada",
+		Name:     "ada@mail.example.com",
+		Enabled:  true,
+		Matchers: []cloudflare.Matcher{{Type: "literal", Field: "to", Value: "ada@mail.example.com"}},
+		Actions:  []cloudflare.Action{{Type: "worker", Value: []string{"mailbox-mcp-email-worker"}}},
+	}
+
+	tests := []struct {
+		name       string
+		handler    func(client client, addr string) (mailbox, error)
+		address    string
+		want       mailbox
+		wantErr    string
+		wantUpdate *update
+	}{
+		{
+			name: "disable known mailbox",
+			handler: func(c client, a string) (mailbox, error) {
+				return call(t, disableMailbox(testConfig, testZone, c), disableInput{Address: a})
+			},
+			address:    "ada@mail.example.com",
+			want:       mailbox{Address: "ada@mail.example.com", RuleID: "rule-ada", Enabled: false},
+			wantUpdate: &update{"rule-ada", false},
+		},
+		{
+			name: "enable known mailbox",
+			handler: func(c client, a string) (mailbox, error) {
+				return call(t, enableMailbox(testConfig, testZone, c), enableInput{Address: a})
+			},
+			address:    "ada@mail.example.com",
+			want:       mailbox{Address: "ada@mail.example.com", RuleID: "rule-ada", Enabled: true},
+			wantUpdate: &update{"rule-ada", true},
+		},
+		{
+			name: "unknown mailbox",
+			handler: func(c client, a string) (mailbox, error) {
+				return call(t, disableMailbox(testConfig, testZone, c), disableInput{Address: a})
+			},
+			address: "missing@mail.example.com",
+			wantErr: "mailbox \"missing@mail.example.com\" not found",
+		},
+		{
+			name: "out-of-domain address rejected without API calls",
+			handler: func(c client, a string) (mailbox, error) {
+				return call(t, enableMailbox(testConfig, testZone, c), enableInput{Address: a})
+			},
+			address: "ada@other.example.com",
+			wantErr: "is not a mailbox on mail.example.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &fakeClient{rules: []cloudflare.Rule{adaRule}}
+			got, err := tt.handler(client, tt.address)
+
+			if tt.wantErr != "" {
+				if err == nil {
+					t.Fatalf("handler() = %+v, want error containing %q", got, tt.wantErr)
+				}
+				if !strings.Contains(err.Error(), tt.wantErr) {
+					t.Errorf("error = %q, want it to contain %q", err.Error(), tt.wantErr)
+				}
+				if len(client.updates) != 0 {
+					t.Errorf("updates = %v, want none", client.updates)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("handler() error = %v, want nil", err)
+			}
+			if got != tt.want {
+				t.Errorf("handler() = %+v, want %+v", got, tt.want)
+			}
+			if len(client.updates) != 1 || client.updates[0] != *tt.wantUpdate {
+				t.Errorf("updates = %v, want [%v]", client.updates, *tt.wantUpdate)
+			}
+		})
+	}
+}
+
+func TestDisableMailboxSurfacesCloudflareError(t *testing.T) {
+	client := &fakeClient{
+		rules: []cloudflare.Rule{
+			{
+				ID:       "rule-ada",
+				Name:     "ada@mail.example.com",
+				Enabled:  true,
+				Matchers: []cloudflare.Matcher{{Type: "literal", Field: "to", Value: "ada@mail.example.com"}},
+				Actions:  []cloudflare.Action{{Type: "worker", Value: []string{"mailbox-mcp-email-worker"}}},
+			},
+		},
+		updateErr: errors.New("cloudflare: error 1004: something went wrong"),
+	}
+	_, err := call(t, disableMailbox(testConfig, testZone, client), disableInput{Address: "ada@mail.example.com"})
+	if err == nil || !strings.Contains(err.Error(), "something went wrong") {
+		t.Errorf("error = %v, want the Cloudflare error to be surfaced", err)
 	}
 }

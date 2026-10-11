@@ -115,6 +115,31 @@ func (c *Client) CreateMailboxRule(ctx context.Context, zoneID, address, worker 
 	return &rule, nil
 }
 
+// GetRule returns the Email Routing rule with the given ID.
+func (c *Client) GetRule(ctx context.Context, zoneID, ruleID string) (*Rule, error) {
+	var rule Rule
+	if err := c.get(ctx, "/zones/"+zoneID+"/email/routing/rules/"+ruleID, &rule); err != nil {
+		return nil, fmt.Errorf("get routing rule %s: %w", ruleID, err)
+	}
+	return &rule, nil
+}
+
+// UpdateRuleStatus sets the enabled flag of the Email Routing rule with the
+// given ID. The Cloudflare API rejects minimal patches on this endpoint, so
+// the full rule is fetched and written back with only the enabled flag
+// changed.
+func (c *Client) UpdateRuleStatus(ctx context.Context, zoneID, ruleID string, enabled bool) error {
+	rule, err := c.GetRule(ctx, zoneID, ruleID)
+	if err != nil {
+		return fmt.Errorf("update routing rule %s: %w", ruleID, err)
+	}
+	rule.Enabled = enabled
+	if err := c.do(ctx, http.MethodPut, "/zones/"+zoneID+"/email/routing/rules/"+ruleID, rule, nil); err != nil {
+		return fmt.Errorf("update routing rule %s: %w", ruleID, err)
+	}
+	return nil
+}
+
 // DeleteRule deletes the Email Routing rule with the given ID.
 func (c *Client) DeleteRule(ctx context.Context, zoneID, ruleID string) error {
 	if err := c.do(ctx, http.MethodDelete, "/zones/"+zoneID+"/email/routing/rules/"+ruleID, nil, nil); err != nil {
