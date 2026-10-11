@@ -65,6 +65,22 @@ working conventions.
 In the dashboard: **Email Routing → Routing Rules → Catch-all address →
 Edit** → action **Send to a Worker** → select `mailbox-mcp`.
 
+Prefer the CLI? Do it with the Email Routing API instead (an API token with
+**Zone → Email Routing Rules → Edit** permission required):
+
+```sh
+# 1. Get your zone ID for the domain
+curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  "https://api.cloudflare.com/client/v4/zones?name=$MAILBOX_MCP_DOMAIN"
+# → .result[0].id
+
+# 2. Point the catch-all rule at the Worker and enable it
+curl -s -X PUT -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/email/routing/rules/catch_all" \
+  --data '{"matchers":[{"type":"all"}],"actions":[{"type":"worker","value":["mailbox-mcp"]}],"name":"Catch-all to mailbox-mcp","enabled":true}'
+```
+
 This is a one-time, manual step. The catch-all routes mail for *every*
 address on the domain to the Worker; the Worker accepts only addresses
 registered in the mailbox registry and bounces everything else with

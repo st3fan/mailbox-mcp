@@ -73,8 +73,10 @@ two of them need your attention — the rest have sensible defaults:
 | `MAILBOX_MCP_REGISTRY` | D1 binding | No | The mailbox registry. Has a default: it is provisioned automatically as `mailbox-mcp-registry`, with the schema applied by the deploy script. Only change this if you want a custom database name. |
 
 **No Cloudflare API token is needed**: mailboxes are
-registry entries, and the catch-all routing rule is configured once, by
-hand, in the dashboard.
+registry entries, and the catch-all routing rule is configured once in the
+dashboard. (The optional CLI route for that one rule is the exception — it
+needs a token with Email Routing Rules edit permission; see
+[Install → CLI](#cli-install).)
 
 ## Install
 
@@ -113,8 +115,26 @@ npm run deploy                                            # applies migrations, 
 ```
 
 The consolidated Worker includes mail ingestion — after deploying, the
-catch-all rule must point at the `mailbox-mcp` Worker (see the one-click
-checklist above).
+catch-all rule must point at the `mailbox-mcp` Worker. Configure it in the
+dashboard (**Email Routing → Routing Rules → Catch-all address → Edit →
+Send to a Worker**), or from the CLI:
+
+```sh
+# 1. Get your zone ID for the domain
+curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  "https://api.cloudflare.com/client/v4/zones?name=$MAILBOX_MCP_DOMAIN"
+# → .result[0].id
+
+# 2. Point the catch-all rule at the Worker and enable it
+curl -s -X PUT -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/email/routing/rules/catch_all" \
+  --data '{"matchers":[{"type":"all"}],"actions":[{"type":"worker","value":["mailbox-mcp"]}],"name":"Catch-all to mailbox-mcp","enabled":true}'
+```
+
+The API token needs **Zone → Email Routing Rules → Edit** permission (this
+is the only step in a CLI install that touches anything outside Workers).
+Without a token, use the dashboard — same one-time step.
 
 **Security note:** `/mcp` is protected only by the bearer token. Keep
 `MAILBOX_MCP_BEARER_TOKEN` private; anyone holding it can manage mailboxes and read
