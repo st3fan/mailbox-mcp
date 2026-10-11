@@ -100,16 +100,11 @@ func Load() (Config, error) {
 		errs = append(errs, fmt.Errorf("%s: unknown transport %q (supported: %s)", EnvTransport, cfg.Transport, TransportStdio))
 	}
 
-	// The messages API is optional at this point: the message tools that use
-	// it arrive in a later layer, which makes both variables required.
-	switch {
-	case cfg.MessagesAPIURL == "" && cfg.MessagesAPIToken == "":
-	case cfg.MessagesAPIURL == "" || cfg.MessagesAPIToken == "":
-		errs = append(errs, fmt.Errorf("both %s and %s must be set together", EnvMessagesAPIURL, EnvMessagesAPIToken))
-	default:
-		if err := validateBaseURL(cfg.MessagesAPIURL); err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", EnvMessagesAPIURL, err))
-		}
+	// The messages API is required: the message tools need it to serve mail.
+	if cfg.MessagesAPIURL == "" || cfg.MessagesAPIToken == "" {
+		errs = append(errs, fmt.Errorf("both %s and %s are required", EnvMessagesAPIURL, EnvMessagesAPIToken))
+	} else if err := validateBaseURL(cfg.MessagesAPIURL); err != nil {
+		errs = append(errs, fmt.Errorf("%s: %w", EnvMessagesAPIURL, err))
 	}
 
 	if err := errors.Join(errs...); err != nil {

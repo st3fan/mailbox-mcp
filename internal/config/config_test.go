@@ -18,12 +18,16 @@ func TestLoad(t *testing.T) {
 			env: map[string]string{
 				EnvCloudflareAPIToken: "token123",
 				EnvDomain:             "mail.example.com",
+				EnvMessagesAPIURL:     "https://messages.example.com",
+				EnvMessagesAPIToken:   "mtoken123",
 			},
 			want: Config{
 				CloudflareAPIToken: "token123",
 				Domain:             "mail.example.com",
 				EmailWorker:        DefaultEmailWorker,
 				Transport:          DefaultTransport,
+				MessagesAPIURL:     "https://messages.example.com",
+				MessagesAPIToken:   "mtoken123",
 			},
 		},
 		{
@@ -33,12 +37,16 @@ func TestLoad(t *testing.T) {
 				EnvDomain:             "mail.example.com",
 				EnvEmailWorker:        "my-worker",
 				EnvTransport:          TransportStdio,
+				EnvMessagesAPIURL:     "https://messages.example.com",
+				EnvMessagesAPIToken:   "mtoken123",
 			},
 			want: Config{
 				CloudflareAPIToken: "token123",
 				Domain:             "mail.example.com",
 				EmailWorker:        "my-worker",
 				Transport:          TransportStdio,
+				MessagesAPIURL:     "https://messages.example.com",
+				MessagesAPIToken:   "mtoken123",
 			},
 		},
 		{
@@ -54,10 +62,16 @@ func TestLoad(t *testing.T) {
 			errParts: []string{EnvDomain},
 		},
 		{
+			name:     "missing messages api config",
+			env:      map[string]string{EnvCloudflareAPIToken: "token123", EnvDomain: "mail.example.com"},
+			wantErr:  true,
+			errParts: []string{EnvMessagesAPIURL, EnvMessagesAPIToken, "are required"},
+		},
+		{
 			name:     "all required config missing reports every problem",
 			env:      map[string]string{},
 			wantErr:  true,
-			errParts: []string{EnvCloudflareAPIToken, EnvDomain},
+			errParts: []string{EnvCloudflareAPIToken, EnvDomain, EnvMessagesAPIURL, EnvMessagesAPIToken},
 		},
 		{
 			name: "invalid domain",
@@ -92,12 +106,16 @@ func TestLoad(t *testing.T) {
 			env: map[string]string{
 				EnvCloudflareAPIToken: " token123 ",
 				EnvDomain:             " mail.example.com ",
+				EnvMessagesAPIURL:     " https://messages.example.com ",
+				EnvMessagesAPIToken:   " mtoken123 ",
 			},
 			want: Config{
 				CloudflareAPIToken: "token123",
 				Domain:             "mail.example.com",
 				EmailWorker:        DefaultEmailWorker,
 				Transport:          DefaultTransport,
+				MessagesAPIURL:     "https://messages.example.com",
+				MessagesAPIToken:   "mtoken123",
 			},
 		},
 		{
@@ -125,7 +143,7 @@ func TestLoad(t *testing.T) {
 				EnvMessagesAPIURL:     "https://messages.example.com",
 			},
 			wantErr:  true,
-			errParts: []string{EnvMessagesAPIURL, EnvMessagesAPIToken, "together"},
+			errParts: []string{EnvMessagesAPIURL, EnvMessagesAPIToken, "are required"},
 		},
 		{
 			name: "messages api token without url",
@@ -135,7 +153,7 @@ func TestLoad(t *testing.T) {
 				EnvMessagesAPIToken:   "mtoken123",
 			},
 			wantErr:  true,
-			errParts: []string{EnvMessagesAPIURL, EnvMessagesAPIToken, "together"},
+			errParts: []string{EnvMessagesAPIURL, EnvMessagesAPIToken, "are required"},
 		},
 		{
 			name: "messages api url with a bad scheme",

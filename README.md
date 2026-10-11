@@ -20,6 +20,11 @@ managing the mailbox**. It deliberately has no functionality to send email. See
 | `delete_mailbox` | Delete a mailbox by address. |
 | `enable_mailbox` | Re-activate a mailbox: mail to the address is routed again. |
 | `disable_mailbox` | De-activate a mailbox: it keeps existing but mail is no longer routed. |
+| `list_messages` | List a mailbox's messages, newest first, paginated. |
+| `read_message` | Read one message: metadata and raw content. |
+| `mark_message_read` | Mark a message as read. |
+| `archive_message` | Archive a message. |
+| `delete_message` | Delete a message. |
 
 Addresses outside the configured domain are rejected locally, before any API
 call. Other routing rules that may exist on the domain (forwarding rules,
@@ -36,10 +41,18 @@ startup if anything is missing or invalid.
 | `MAILBOX_MCP_DOMAIN` | yes | — | The single email domain to manage, e.g. `mail.example.com`. |
 | `MAILBOX_MCP_EMAIL_WORKER` | no | `mailbox-mcp-email-worker` | Name of the Email Worker that mailboxes route to. |
 | `MAILBOX_MCP_TRANSPORT` | no | `stdio` | MCP transport. Only `stdio` is supported. |
+| `MAILBOX_MCP_MESSAGES_API_URL` | yes | — | Base URL of the messages API worker that serves stored mail. |
+| `MAILBOX_MCP_MESSAGES_API_TOKEN` | yes | — | Bearer token of the messages API worker. |
 
 Create a scoped API token in the Cloudflare dashboard: **My Profile → API
 Tokens → Create Token**, with the *Email Routing Rules* edit permission scoped
 to the zone of your email domain.
+
+Mail storage and reading run on two Cloudflare Workers in [`workers/`](workers/):
+the Email Worker that stores mail in R2
+([setup](workers/email-worker/README.md)) and the messages API that serves it
+([setup](workers/messages-api/README.md), including the API token and base URL
+the two `MAILBOX_MCP_MESSAGES_API_*` variables expect).
 
 ## Running locally
 
