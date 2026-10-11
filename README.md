@@ -62,14 +62,15 @@ that walk an agent through those flows. The wording is reviewed in
 
 ## Configuration
 
-The MCP worker is configured with wrangler vars, secrets, and bindings:
+The Worker is configured with wrangler vars, secrets, and bindings. Only
+two of them need your attention — the rest have sensible defaults:
 
-| Binding | Kind | Meaning |
-|---|---|---|
-| `DOMAIN` | var | The single (dedicated) email domain to manage, e.g. `example.com`. |
-| `MAILBOX_STORE` | R2 binding | The bucket the Worker stores received mail in. |
-| `REGISTRY` | D1 binding | The mailbox registry. |
-| `MCP_AUTH_TOKEN` | secret | Bearer token MCP clients must present at `/mcp`. |
+| Binding | Kind | Required | Meaning |
+|---|---|---|---|
+| `DOMAIN` | var | **Yes** | The single (dedicated) email domain to manage, e.g. `example.com`. |
+| `MCP_AUTH_TOKEN` | secret | **Yes** | Bearer token MCP clients must present at `/mcp`. Generate a random string, e.g. `openssl rand -hex 32`. |
+| `MAILBOX_STORE` | R2 binding | No | The bucket received mail is stored in. Has a default: it is provisioned automatically as `mailbox-mcp-mailbox-store` (the button creates it; CLI: `wrangler r2 bucket create mailbox-mcp-mailbox-store`). Only change this if you want a custom bucket name. |
+| `REGISTRY` | D1 binding | No | The mailbox registry. Has a default: it is provisioned automatically as `mailbox-registry`, with the schema applied by the deploy script. Only change this if you want a custom database name. |
 
 **No Cloudflare API token is needed**: mailboxes are
 registry entries, and the catch-all routing rule is configured once, by
