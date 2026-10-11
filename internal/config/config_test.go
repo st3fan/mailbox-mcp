@@ -100,6 +100,65 @@ func TestLoad(t *testing.T) {
 				Transport:          DefaultTransport,
 			},
 		},
+		{
+			name: "messages api configured",
+			env: map[string]string{
+				EnvCloudflareAPIToken: "token123",
+				EnvDomain:             "mail.example.com",
+				EnvMessagesAPIURL:     "https://messages.example.com",
+				EnvMessagesAPIToken:   "mtoken123",
+			},
+			want: Config{
+				CloudflareAPIToken: "token123",
+				Domain:             "mail.example.com",
+				EmailWorker:        DefaultEmailWorker,
+				Transport:          DefaultTransport,
+				MessagesAPIURL:     "https://messages.example.com",
+				MessagesAPIToken:   "mtoken123",
+			},
+		},
+		{
+			name: "messages api url without token",
+			env: map[string]string{
+				EnvCloudflareAPIToken: "token123",
+				EnvDomain:             "mail.example.com",
+				EnvMessagesAPIURL:     "https://messages.example.com",
+			},
+			wantErr:  true,
+			errParts: []string{EnvMessagesAPIURL, EnvMessagesAPIToken, "together"},
+		},
+		{
+			name: "messages api token without url",
+			env: map[string]string{
+				EnvCloudflareAPIToken: "token123",
+				EnvDomain:             "mail.example.com",
+				EnvMessagesAPIToken:   "mtoken123",
+			},
+			wantErr:  true,
+			errParts: []string{EnvMessagesAPIURL, EnvMessagesAPIToken, "together"},
+		},
+		{
+			name: "messages api url with a bad scheme",
+			env: map[string]string{
+				EnvCloudflareAPIToken: "token123",
+				EnvDomain:             "mail.example.com",
+				EnvMessagesAPIURL:     "ftp://messages.example.com",
+				EnvMessagesAPIToken:   "mtoken123",
+			},
+			wantErr:  true,
+			errParts: []string{EnvMessagesAPIURL, "http or https"},
+		},
+		{
+			name: "messages api url without a host",
+			env: map[string]string{
+				EnvCloudflareAPIToken: "token123",
+				EnvDomain:             "mail.example.com",
+				EnvMessagesAPIURL:     "https://",
+				EnvMessagesAPIToken:   "mtoken123",
+			},
+			wantErr:  true,
+			errParts: []string{EnvMessagesAPIURL, "missing host"},
+		},
 	}
 
 	for _, tt := range tests {

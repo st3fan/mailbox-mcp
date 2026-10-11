@@ -5,6 +5,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -25,6 +26,14 @@ const (
 
 	// EnvTransport selects the MCP transport.
 	EnvTransport = "MAILBOX_MCP_TRANSPORT"
+
+	// EnvMessagesAPIURL is the base URL of the messages API worker that serves
+	// the mail the email worker stores in R2, for example
+	// "https://messages.example.com".
+	EnvMessagesAPIURL = "MAILBOX_MCP_MESSAGES_API_URL"
+
+	// EnvMessagesAPIToken is the bearer token the messages API requires.
+	EnvMessagesAPIToken = "MAILBOX_MCP_MESSAGES_API_TOKEN"
 
 	// DefaultEmailWorker is the worker used when EnvEmailWorker is unset.
 	DefaultEmailWorker = "mailbox-mcp-email-worker"
@@ -49,6 +58,12 @@ type Config struct {
 
 	// Transport is the MCP transport to serve on.
 	Transport string
+
+	// MessagesAPIURL is the base URL of the messages API worker.
+	MessagesAPIURL string
+
+	// MessagesAPIToken authenticates calls to the messages API.
+	MessagesAPIToken string
 }
 
 // Load reads the configuration from the environment, applies defaults, and
@@ -60,6 +75,8 @@ func Load() (Config, error) {
 		Domain:             strings.TrimSpace(os.Getenv(EnvDomain)),
 		EmailWorker:        strings.TrimSpace(os.Getenv(EnvEmailWorker)),
 		Transport:          strings.TrimSpace(os.Getenv(EnvTransport)),
+		MessagesAPIURL:     strings.TrimSpace(os.Getenv(EnvMessagesAPIURL)),
+		MessagesAPIToken:   strings.TrimSpace(os.Getenv(EnvMessagesAPIToken)),
 	}
 	if cfg.EmailWorker == "" {
 		cfg.EmailWorker = DefaultEmailWorker
@@ -82,10 +99,41 @@ func Load() (Config, error) {
 	default:
 		errs = append(errs, fmt.Errorf("%s: unknown transport %q (supported: %s)", EnvTransport, cfg.Transport, TransportStdio))
 	}
+
+	// The messages API is optional at this point: the message tools that use
+	// it arrive in a later layer, which makes both variables required.
+	switch {
+	case cfg.MessagesAPIURL == "" && cfg.MessagesAPIToken == "":
+	case cfg.MessagesAPIURL == "" || cfg.MessagesAPIToken == "":
+		errs = append(errs, fmt.Errorf("both %s and %s must be set together", EnvMessagesAPIURL, EnvMessagesAPIToken))
+	default:
+		if err := validateBaseURL(cfg.MessagesAPIURL); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", EnvMessagesAPIURL, err))
+		}
+	}
+
 	if err := errors.Join(errs...); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
+}
+
+// validateBaseURL checks that a messages API base URL is an absolute http(s)
+// URL with a host.
+func validateBaseURL(raw string) error {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("%q is not a valid base URL: %w", raw, err)
+	}
+	switch parsed.Scheme {
+	case "http", "https":
+	default:
+		return fmt.Errorf("%q is not a valid base URL: scheme must be http or https", raw)
+	}
+	if parsed.Host == "" {
+		return fmt.Errorf("%q is not a valid base URL: missing host", raw)
+	}
+	return nil
 }
 
 // validateDomain performs a basic sanity check on a domain name. Full DNS
