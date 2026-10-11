@@ -21,8 +21,8 @@ managing the mailbox**. It deliberately has no functionality to send email. See
 | `enable_mailbox` | Re-activate a mailbox: mail to the address is routed again. |
 | `disable_mailbox` | De-activate a mailbox: it keeps existing but mail is no longer routed. |
 | `list_messages` | List a mailbox's messages, newest first, paginated. |
-| `read_message` | Read one message: metadata and raw content. |
-| `mark_message_read` | Mark a message as read. |
+| `read_message` | Read one message: metadata and raw content. Marks the message as read automatically. |
+| `mark_message_read` | Mark a message as read without re-reading it. |
 | `archive_message` | Archive a message. |
 | `delete_message` | Delete a message. |
 

@@ -16,7 +16,7 @@ const Instructions = `You are connected to mailbox-mcp, an MCP server for tempor
 This server cannot send email. There is no sending, replying, forwarding, or editing of mail — mailboxes only receive. If a task needs mail to be sent, that has to happen outside this server.
 
 - create_random_mailbox gives you a fresh address like first.last@<domain>. Use it whenever a form, signup, or service needs an email address.
-- Mail sent to a mailbox is stored automatically; you do not need to fetch anything. Check a mailbox with list_messages — safe to poll, listing never marks messages read. Read a message in full with read_message, and mark_message_read once you have acted on it.
+- Mail sent to a mailbox is stored automatically; you do not need to fetch anything. Check a mailbox with list_messages — safe to poll, listing never marks messages read. Read a message in full with read_message — it marks the message as read automatically. To mark a message handled without re-reading it, use mark_message_read.
 - Prefer archiving over deleting. When a message is no longer needed, use archive_message: it keeps the mail for later reference while removing it from the way. delete_message destroys a message permanently and cannot be undone — reserve it for noise you are certain about (bouncebacks, obvious spam).
 - delete_mailbox removes the mailbox and all its mail permanently. Only delete a mailbox when the address is truly finished with and nothing in it is worth keeping — when in doubt, leave it.
 - Addresses must be on the configured domain; anything else is rejected locally before any API call.`

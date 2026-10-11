@@ -22,12 +22,19 @@ type fakeMessagesAPI struct {
 }
 
 func newFakeMessagesAPI(t *testing.T, status int, body string) (*messages.Client, *fakeMessagesAPI) {
+	return newFakeMessagesAPIFunc(t, func(*http.Request) (int, string) { return status, body })
+}
+
+// newFakeMessagesAPIFunc lets tests route responses per request, e.g. GET
+// read vs POST mark-read.
+func newFakeMessagesAPIFunc(t *testing.T, respond func(*http.Request) (int, string)) (*messages.Client, *fakeMessagesAPI) {
 	t.Helper()
 	fake := &fakeMessagesAPI{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fake.requests.Add(1)
 		fake.method.Store(r.Method)
 		fake.path.Store(r.URL.RequestURI())
+		status, body := respond(r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		_, _ = w.Write([]byte(body))
@@ -104,9 +111,13 @@ func TestMessageTools(t *testing.T) {
 	domain := "outofscope.party"
 	ctx := context.Background()
 
-	t.Run("read_message returns metadata and raw content", func(t *testing.T) {
-		client, fake := newFakeMessagesAPI(t, http.StatusOK,
-			`{"message":{"id":"1-a","subject":"Hi"},"raw":"raw body"}`)
+	t.Run("read_message returns metadata and raw content and marks read", func(t *testing.T) {
+		client, fake := newFakeMessagesAPIFunc(t, func(r *http.Request) (int, string) {
+			if r.Method == http.MethodGet {
+				return http.StatusOK, `{"message":{"id":"1-a","subject":"Hi","read":false},"raw":"raw body"}`
+			}
+			return http.StatusOK, `{"message":{"id":"1-a","subject":"Hi","read":true}}`
+		})
 		handler := readMessage(client, domain)
 
 		_, out, err := handler(ctx, &mcp.CallToolRequest{}, messageInput{
@@ -118,8 +129,31 @@ func TestMessageTools(t *testing.T) {
 		if out.Raw != "raw body" || out.Message.Subject != "Hi" {
 			t.Errorf("unexpected output: %+v", out)
 		}
-		if got := fake.requests.Load(); got != 1 {
-			t.Errorf("api calls = %d, want 1", got)
+		if !out.Message.Read {
+			t.Errorf("Read = false, want the post-mark state")
+		}
+		if got := fake.requests.Load(); got != 2 {
+			t.Errorf("api calls = %d, want 2 (read + mark read)", got)
+		}
+		if got := fake.method.Load().(string); got != http.MethodPost {
+			t.Errorf("last request method = %q, want POST (the mark)", got)
+		}
+	})
+
+	t.Run("read_message surfaces a failed mark", func(t *testing.T) {
+		client, _ := newFakeMessagesAPIFunc(t, func(r *http.Request) (int, string) {
+			if r.Method == http.MethodGet {
+				return http.StatusOK, `{"message":{"id":"1-a","read":false},"raw":"raw body"}`
+			}
+			return http.StatusInternalServerError, `{"error":"storage down"}`
+		})
+		handler := readMessage(client, domain)
+
+		_, _, err := handler(ctx, &mcp.CallToolRequest{}, messageInput{
+			Address: "alice@outofscope.party", ID: "1-a",
+		})
+		if err == nil || !strings.Contains(err.Error(), "marking it read failed") {
+			t.Fatalf("error = %v, want the mark-failed error", err)
 		}
 	})
 
