@@ -4,10 +4,13 @@ Guidance for AI agents (and humans) working in this repository.
 
 ## Project overview
 
-- **Language:** Go. All new code is written in Go and follows standard Go conventions
-  (`gofmt` formatting, idiomatic package layout, table-driven tests).
-- **Packaging:** The project is packaged with Docker. Changes that affect how the binary
-  builds or runs must keep the Dockerfile working.
+- **Language:** TypeScript on Cloudflare Workers. The project is two Workers
+  — `workers/mcp` (the MCP endpoint + message storage) and
+  `workers/email-worker` (mail ingestion into R2) — each with its own
+  package, vitest tests, and `tsc` type checking. Follow the style of the
+  existing worker code; there is no Go in this repository anymore.
+- **Packaging:** Workers deploy with `wrangler deploy` per worker directory.
+  Configuration lives in wrangler vars and secrets, not environment files.
 
 ## Planning work
 
@@ -49,17 +52,12 @@ Guidance for AI agents (and humans) working in this repository.
 
 ## Verifying changes
 
-- Build and test before submitting a PR:
-
+- Test and type-check before submitting a PR, for every worker you touched:
   ```bash
-  go build ./...
-  go test ./...
-  go vet ./...
-  gofmt -l .
+  cd workers/mcp && npm test && npm run typecheck
+  cd workers/email-worker && npm test && npm run typecheck
   ```
-
-  All four must be clean; `gofmt -l .` prints files that are not formatted (empty
-  output means clean).
-
-- If you touch the Dockerfile or anything the image depends on, build the image to
-  verify it still works before requesting review.
+  Both must be clean. When a change affects a deployed worker, deploy it to
+  verify before requesting review.
+- Work is planned in GitHub issues and lands via PRs, preferably as stacks
+  (see below); reference the issue in commits and pull requests.

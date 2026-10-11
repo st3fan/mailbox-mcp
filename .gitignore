@@ -1,12 +1,5 @@
-# Local credentials used to run the MCP server (see DEVELOPING.md)
+# Local credentials and scratch files
 .env
-
-# Go build/test artifacts
-/mailbox-mcp
-*.exe
-*.test
-*.out
-coverage.txt
 
 # Worker dependencies (installed locally with npm)
 workers/*/node_modules/
