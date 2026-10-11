@@ -20,13 +20,10 @@ MAILBOX_MCP_DOMAIN = "outofscope.party"
 binding = "MAILBOX_MCP_STORE"
 bucket_name = "mailbox-mcp-store"
 
-# Mailbox registry. Fresh installs: either let the Deploy to Cloudflare
-# button provision the database (it rewrites this placeholder), or create it
-# yourself and paste its ID here:
-#   npx wrangler d1 create mailbox-mcp-registry
-#   npx wrangler d1 migrations apply MAILBOX_MCP_REGISTRY --remote
+# Mailbox registry. Provisioned automatically on first deploy (no
+# database_id needed) and inherited from the existing binding on subsequent
+# deploys. Migrations are applied by the deploy script after deploying.
 [[d1_databases]]
 binding = "MAILBOX_MCP_REGISTRY"
 database_name = "mailbox-mcp-registry"
-database_id = "e82a8e43-20f5-4993-a6bf-f83f03b670d6"
 migrations_dir = "migrations"

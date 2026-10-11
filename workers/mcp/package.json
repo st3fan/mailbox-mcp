@@ -1,6 +1,6 @@
 {
   "name": "mailbox-mcp-worker",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "description": "Cloudflare Worker serving the mailbox-mcp MCP endpoint and message storage.",
   "type": "module",
@@ -8,7 +8,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "db:migrations:apply": "wrangler d1 migrations apply MAILBOX_MCP_REGISTRY --remote",
-    "deploy": "npm run db:migrations:apply && wrangler deploy",
+    "deploy": "wrangler deploy && npm run db:migrations:apply && node scripts/provision-token.mjs",
     "uninstall": "wrangler delete && wrangler d1 delete mailbox-mcp-registry && wrangler r2 bucket delete mailbox-mcp-store"
   },
   "cloudflare": {
