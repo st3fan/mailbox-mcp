@@ -32,14 +32,14 @@ export function registerMailboxTools(server: McpServer, env: Env): void {
   server.registerTool(
     "create_mailbox",
     {
-      description: `Create a mailbox on ${env.DOMAIN}. The address immediately receives mail: mail to the domain arrives via a catch-all routing rule and is accepted when the address is registered.`,
+      description: `Create a mailbox on ${env.MAILBOX_MCP_DOMAIN}. The address immediately receives mail: mail to the domain arrives via a catch-all routing rule and is accepted when the address is registered.`,
       inputSchema: {
         address: z.string().describe("the mailbox address to create, local@domain"),
       },
     },
     async ({ address }) => {
       const mailbox = validateAddress(address, env);
-      const created = await createMailbox(env.REGISTRY, mailbox);
+      const created = await createMailbox(env.MAILBOX_MCP_REGISTRY, mailbox);
       return text({ address: created.address, enabled: created.enabled, created_at: created.created_at });
     },
   );
@@ -47,15 +47,15 @@ export function registerMailboxTools(server: McpServer, env: Env): void {
   server.registerTool(
     "create_random_mailbox",
     {
-      description: `Create a mailbox on ${env.DOMAIN} with a random name like first.last@domain. The address immediately receives mail.`,
+      description: `Create a mailbox on ${env.MAILBOX_MCP_DOMAIN} with a random name like first.last@domain. The address immediately receives mail.`,
       inputSchema: {},
     },
     async () => {
       let lastError: unknown = null;
       for (let attempt = 0; attempt < MAX_RANDOM_CREATE_ATTEMPTS; attempt++) {
-        const address = randomAddress(env.DOMAIN);
+        const address = randomAddress(env.MAILBOX_MCP_DOMAIN);
         try {
-          const created = await createMailbox(env.REGISTRY, address);
+          const created = await createMailbox(env.MAILBOX_MCP_REGISTRY, address);
           return text({ address: created.address, enabled: created.enabled, created_at: created.created_at });
         } catch (err) {
           if (err instanceof RegistryConflictError) {
@@ -72,11 +72,11 @@ export function registerMailboxTools(server: McpServer, env: Env): void {
   server.registerTool(
     "list_mailboxes",
     {
-      description: `List the mailboxes registered on ${env.DOMAIN}, sorted by address.`,
+      description: `List the mailboxes registered on ${env.MAILBOX_MCP_DOMAIN}, sorted by address.`,
       inputSchema: {},
     },
     async () => {
-      const mailboxes = await listMailboxes(env.REGISTRY);
+      const mailboxes = await listMailboxes(env.MAILBOX_MCP_REGISTRY);
       return text({ mailboxes });
     },
   );
@@ -84,15 +84,15 @@ export function registerMailboxTools(server: McpServer, env: Env): void {
   server.registerTool(
     "delete_mailbox",
     {
-      description: `Delete a mailbox on ${env.DOMAIN}: the address is removed from the registry, it no longer receives mail, and all of its stored messages are permanently deleted.`,
+      description: `Delete a mailbox on ${env.MAILBOX_MCP_DOMAIN}: the address is removed from the registry, it no longer receives mail, and all of its stored messages are permanently deleted.`,
       inputSchema: {
         address: z.string().describe("the mailbox address to delete"),
       },
     },
     async ({ address }) => {
       const mailbox = validateAddress(address, env);
-      await registryDelete(env.REGISTRY, mailbox);
-      await deleteAllMessages(env.MAILBOX_STORE, mailbox);
+      await registryDelete(env.MAILBOX_MCP_REGISTRY, mailbox);
+      await deleteAllMessages(env.MAILBOX_MCP_STORE, mailbox);
       return text({ address: mailbox, deleted: true });
     },
   );
@@ -100,14 +100,14 @@ export function registerMailboxTools(server: McpServer, env: Env): void {
   server.registerTool(
     "enable_mailbox",
     {
-      description: `Enable a mailbox on ${env.DOMAIN}: mail to the address is accepted again.`,
+      description: `Enable a mailbox on ${env.MAILBOX_MCP_DOMAIN}: mail to the address is accepted again.`,
       inputSchema: {
         address: z.string().describe("the mailbox address to enable"),
       },
     },
     async ({ address }) => {
       const mailbox = validateAddress(address, env);
-      const updated = await registrySetEnabled(env.REGISTRY, mailbox, true);
+      const updated = await registrySetEnabled(env.MAILBOX_MCP_REGISTRY, mailbox, true);
       return text(updated);
     },
   );
@@ -115,14 +115,14 @@ export function registerMailboxTools(server: McpServer, env: Env): void {
   server.registerTool(
     "disable_mailbox",
     {
-      description: `Disable a mailbox on ${env.DOMAIN}: the mailbox keeps existing and keeps its stored mail, but incoming mail is bounced.`,
+      description: `Disable a mailbox on ${env.MAILBOX_MCP_DOMAIN}: the mailbox keeps existing and keeps its stored mail, but incoming mail is bounced.`,
       inputSchema: {
         address: z.string().describe("the mailbox address to disable"),
       },
     },
     async ({ address }) => {
       const mailbox = validateAddress(address, env);
-      const updated = await registrySetEnabled(env.REGISTRY, mailbox, false);
+      const updated = await registrySetEnabled(env.MAILBOX_MCP_REGISTRY, mailbox, false);
       return text(updated);
     },
   );

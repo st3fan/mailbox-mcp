@@ -27,8 +27,8 @@ export function validateAddress(address: string, env: Env): string {
   if (domain.includes("@")) {
     throw new Error(`"${trimmed}" is not a valid mailbox address: multiple @`);
   }
-  if (domain.toLowerCase() !== env.DOMAIN.toLowerCase()) {
-    throw new Error(`"${trimmed}" is not a mailbox on ${env.DOMAIN}`);
+  if (domain.toLowerCase() !== env.MAILBOX_MCP_DOMAIN.toLowerCase()) {
+    throw new Error(`"${trimmed}" is not a mailbox on ${env.MAILBOX_MCP_DOMAIN}`);
   }
   return `${local}@${domain.toLowerCase()}`;
 }

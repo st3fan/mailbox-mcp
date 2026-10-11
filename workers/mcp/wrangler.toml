@@ -3,28 +3,30 @@ main = "src/index.ts"
 compatibility_date = "2025-10-01"
 
 # The consolidated Worker serves streamable HTTP at /mcp (fetch handler) and
-# ingests mail (email handler): it owns the mailbox registry (REGISTRY D1
-# database) and message storage (the MAILBOX_STORE R2 binding).
+# ingests mail (email handler): it owns the mailbox registry (MAILBOX_MCP_REGISTRY D1
+# database) and message storage (the MAILBOX_MCP_STORE R2 binding).
 #
 # Secrets (set once with wrangler secret put <NAME>):
-#   MCP_AUTH_TOKEN        bearer token MCP clients must present
+#   MAILBOX_MCP_BEARER_TOKEN        bearer token MCP clients must present
 #
 # Exposing the endpoint beyond localhost-style use is an operator decision:
 # every client that can reach /mcp with the token can manage mailboxes and
 # read stored mail.
 
 [vars]
-DOMAIN = "example.com"
+MAILBOX_MCP_DOMAIN = "example.com"
 
 [[r2_buckets]]
-binding = "MAILBOX_STORE"
-bucket_name = "mailbox-mcp-mailbox-store"
+binding = "MAILBOX_MCP_STORE"
+bucket_name = "mailbox-mcp-store"
 
-# Mailbox registry. Create the database once, then paste its ID here:
-#   npx wrangler d1 create mailbox-registry
-#   npx wrangler d1 migrations apply mailbox-registry
+# Mailbox registry. Fresh installs: either let the Deploy to Cloudflare
+# button provision the database (it rewrites this placeholder), or create it
+# yourself and paste its ID here:
+#   npx wrangler d1 create mailbox-mcp-registry
+#   npx wrangler d1 migrations apply MAILBOX_MCP_REGISTRY --remote
 [[d1_databases]]
-binding = "REGISTRY"
-database_name = "mailbox-registry"
-database_id = "1326f8ce-a528-4d3c-be63-1e04a4fe9886"
+binding = "MAILBOX_MCP_REGISTRY"
+database_name = "mailbox-mcp-registry"
+database_id = "REPLACE_AFTER_D1_CREATE"
 migrations_dir = "migrations"

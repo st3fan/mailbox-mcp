@@ -1,4 +1,4 @@
-// An in-memory D1 binding stub covering exactly the mailbox-registry SQL the
+// An in-memory D1 binding stub covering exactly the mailbox-mcp-registry SQL the
 // registry module issues: INSERT, SELECT (one/all), UPDATE, DELETE — with a
 // PRIMARY KEY conflict throwing like real SQLite does. A lookupFails flag
 // simulates registry outages (used by the email handler's deferral test).

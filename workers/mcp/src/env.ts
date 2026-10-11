@@ -2,14 +2,14 @@
 
 export interface Env {
   /** R2 bucket the email worker stores messages in; owned by this worker. */
-  MAILBOX_STORE: R2Bucket;
+  MAILBOX_MCP_STORE: R2Bucket;
 
   /** D1 database holding the mailbox registry (shared with the email worker). */
-  REGISTRY: D1Database;
+  MAILBOX_MCP_REGISTRY: D1Database;
 
   /** The single email domain mailboxes are managed on (wrangler var). */
-  DOMAIN: string;
+  MAILBOX_MCP_DOMAIN: string;
 
   /** Bearer token MCP clients must present (secret). */
-  MCP_AUTH_TOKEN: string;
+  MAILBOX_MCP_BEARER_TOKEN: string;
 }

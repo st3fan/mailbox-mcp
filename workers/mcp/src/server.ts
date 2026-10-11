@@ -9,7 +9,7 @@ import { registerMailboxTools } from "./mailbox-tools";
 import { registerMessageTools } from "./message-tools";
 
 export const SERVER_NAME = "mailbox-mcp";
-export const SERVER_VERSION = "0.4.0";
+export const SERVER_VERSION = "0.5.0";
 
 /** buildServer constructs the MCP server for one request. Stateless serving
  * constructs a fresh instance per request via the factory in index.ts. */

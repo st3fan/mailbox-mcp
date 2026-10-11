@@ -7,10 +7,10 @@ import { FakeR2Bucket } from "./fake-r2";
 
 const TOKEN = "test-mcp-token";
 const env: Env = {
-  MAILBOX_STORE: new FakeR2Bucket() as unknown as R2Bucket,
-  REGISTRY: new FakeD1() as unknown as D1Database,
-  DOMAIN: "example.com",
-  MCP_AUTH_TOKEN: TOKEN,
+  MAILBOX_MCP_STORE: new FakeR2Bucket() as unknown as R2Bucket,
+  MAILBOX_MCP_REGISTRY: new FakeD1() as unknown as D1Database,
+  MAILBOX_MCP_DOMAIN: "example.com",
+  MAILBOX_MCP_BEARER_TOKEN: TOKEN,
 };
 const ctx = { waitUntil: () => {}, passThroughOnException: () => {} } as unknown as ExecutionContext;
 
@@ -32,7 +32,7 @@ async function callTool(id: number, name: string, args: Record<string, unknown>)
 /** putMessage stores a message's raw and metadata objects in the fake bucket,
  * like the email worker does. */
 async function putMessage(mailbox: string, id: string, subject: string, raw: string) {
-  const bucket = env.MAILBOX_STORE as unknown as FakeR2Bucket;
+  const bucket = env.MAILBOX_MCP_STORE as unknown as FakeR2Bucket;
   await bucket.put(`${mailbox}/${id}.eml`, raw);
   await bucket.put(
     `${mailbox}/${id}.json`,
@@ -45,7 +45,7 @@ async function putMessage(mailbox: string, id: string, subject: string, raw: str
 }
 
 beforeEach(() => {
-  (env.MAILBOX_STORE as unknown as FakeR2Bucket).objects.clear();
+  (env.MAILBOX_MCP_STORE as unknown as FakeR2Bucket).objects.clear();
 });
 
 describe("list_messages", () => {
@@ -59,7 +59,7 @@ describe("list_messages", () => {
     expect(out.messages.map((m: { id: string }) => m.id)).toEqual(["1-new", "2-old"]);
     expect(out.nextPageToken).toBeUndefined();
     // Listing is side-effect free: metadata objects unchanged.
-    const bucket = env.MAILBOX_STORE as unknown as FakeR2Bucket;
+    const bucket = env.MAILBOX_MCP_STORE as unknown as FakeR2Bucket;
     const meta = JSON.parse(new TextDecoder().decode((await bucket.get("alice@example.com/1-new.json"))!.body));
     expect(meta.read).toBe(false);
   });
@@ -68,7 +68,7 @@ describe("list_messages", () => {
     const { isError, text } = await callTool(2, "list_messages", { address: "alice@elsewhere.example" });
     expect(isError).toBe(true);
     expect(text).toContain("is not a mailbox on example.com");
-    expect((env.MAILBOX_STORE as unknown as FakeR2Bucket).objects.size).toBe(0);
+    expect((env.MAILBOX_MCP_STORE as unknown as FakeR2Bucket).objects.size).toBe(0);
   });
 });
 
@@ -86,7 +86,7 @@ describe("read_message", () => {
     expect(out.raw).toBe("raw body");
 
     // The flag change is persisted in the bucket.
-    const bucket = env.MAILBOX_STORE as unknown as FakeR2Bucket;
+    const bucket = env.MAILBOX_MCP_STORE as unknown as FakeR2Bucket;
     const meta = JSON.parse(new TextDecoder().decode((await bucket.get("alice@example.com/1-a.json"))!.body));
     expect(meta.read).toBe(true);
   });
@@ -136,7 +136,7 @@ describe("delete_message", () => {
     const del = await callTool(9, "delete_message", { address: "alice@example.com", id: "1-a" });
     expect(del.isError).toBe(false);
     expect(JSON.parse(del.text)).toEqual({ deleted: true });
-    expect((env.MAILBOX_STORE as unknown as FakeR2Bucket).objects.size).toBe(0);
+    expect((env.MAILBOX_MCP_STORE as unknown as FakeR2Bucket).objects.size).toBe(0);
 
     const again = await callTool(10, "delete_message", { address: "alice@example.com", id: "1-a" });
     expect(again.isError).toBe(true);
