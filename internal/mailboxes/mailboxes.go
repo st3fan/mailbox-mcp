@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/0x6flab/namegenerator"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/st3fan/mailbox-mcp/internal/cloudflare"
@@ -43,6 +44,11 @@ func Register(srv *mcp.Server, cfg config.Config, zoneID string, client client) 
 	}, deleteMailbox(cfg, zoneID, client))
 
 	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "create_random_mailbox",
+		Description: fmt.Sprintf("Create a new mailbox on %s with a random name like first.last@%s, routed to the %s worker.", cfg.Domain, cfg.Domain, cfg.EmailWorker),
+	}, createRandomMailbox(cfg, zoneID, client))
+
+	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "enable_mailbox",
 		Description: fmt.Sprintf("Enable a mailbox on %s: mail to the address is routed to the %s worker again.", cfg.Domain, cfg.EmailWorker),
 	}, enableMailbox(cfg, zoneID, client))
@@ -57,6 +63,57 @@ func Register(srv *mcp.Server, cfg config.Config, zoneID string, client client) 
 type createInput struct {
 	// Address is the full mailbox address, for example "alice@mail.example.com".
 	Address string `json:"address" jsonschema:"the mailbox address to create, local@domain"`
+}
+
+// createRandomInput is the input of the create_random_mailbox tool. It is empty.
+type createRandomInput struct{}
+
+// randomNameGenerator generates the local part of random mailbox addresses.
+// It is a package variable so tests can replace it. The generator joins the
+// two names with "-" (WithSeparator is not in a tagged release yet), which we
+// translate to "." for the email local part.
+var randomNameGenerator = namegenerator.NewGenerator()
+
+// maxRandomCreateAttempts is how often create_random_mailbox retries with a
+// new random name when Cloudflare reports the address already exists.
+const maxRandomCreateAttempts = 3
+
+// randomAddress returns a generated address like john.smith@example.com. The
+// generated name is lowercased (the local part is displayed as-is in lists and
+// Cloudflare matches the domain case-insensitively) and its name separator is
+// turned into a dot, per the first.last@domain address format.
+func randomAddress(domain string) string {
+	name := strings.ReplaceAll(randomNameGenerator.Generate(), "-", ".")
+	return strings.ToLower(name) + "@" + domain
+}
+
+// isDuplicateAddressError reports whether err is Cloudflare complaining that a
+// routing rule for the address already exists.
+func isDuplicateAddressError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "already exist") || strings.Contains(msg, "duplicate")
+}
+
+func createRandomMailbox(cfg config.Config, zoneID string, client client) mcp.ToolHandlerFor[createRandomInput, mailbox] {
+	return func(ctx context.Context, req *mcp.CallToolRequest, input createRandomInput) (*mcp.CallToolResult, mailbox, error) {
+		var lastErr error
+		for attempt := 0; attempt < maxRandomCreateAttempts; attempt++ {
+			address := randomAddress(cfg.Domain)
+			rule, err := client.CreateMailboxRule(ctx, zoneID, address, cfg.EmailWorker)
+			if err != nil {
+				if isDuplicateAddressError(err) {
+					lastErr = err
+					continue
+				}
+				return nil, mailbox{}, err
+			}
+			return nil, mailbox{Address: address, RuleID: rule.ID, Enabled: rule.Enabled}, nil
+		}
+		return nil, mailbox{}, fmt.Errorf("no unique random mailbox after %d attempts: %w", maxRandomCreateAttempts, lastErr)
+	}
 }
 
 // mailbox is a single managed mailbox.

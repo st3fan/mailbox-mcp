@@ -78,7 +78,9 @@ To use the Docker image instead, set `"command": "docker"` with
 `"args": ["run", "-i", "--rm", "-e", "MAILBOX_MCP_CLOUDFLARE_API_TOKEN", "-e", "MAILBOX_MCP_DOMAIN=mail.example.com", "mailbox-mcp"]`.
 
 Save, then hit **Refresh** in the MCP Servers panel; `mailbox-mcp` should show
-the three tools (`create_mailbox`, `list_mailboxes`, `delete_mailbox`). Try it
-by asking Cline to *"list mailboxes"* and then *"create a mailbox called
-alice"*. Send an email to the created address — it should arrive at the
-placeholder worker's logs (it is not stored yet).
+the six tools (`create_mailbox`, `create_random_mailbox`, `list_mailboxes`,
+`delete_mailbox`, `enable_mailbox`, `disable_mailbox`). Try it by asking Cline
+to *"list mailboxes"*, then *"create a mailbox called alice"* and *"create a
+random mailbox"*. Send an email to the created address — it should arrive at the
+placeholder worker's logs (it is not stored yet). A disabled mailbox keeps
+existing but stops receiving mail; enable it to resume delivery.
