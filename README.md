@@ -30,6 +30,17 @@ Addresses outside the configured domain are rejected locally, before any API
 call. Other routing rules that may exist on the domain (forwarding rules,
 catch-alls) are never listed or deleted.
 
+## Agent guidance
+
+The server tells connecting agents what it is for and how to behave with it.
+The initialize response carries instructions: mailbox-mcp is for temporary
+addresses that receive mail (sign-up flows, sign-in with email, account
+creation on systems under test), it **cannot send email**, and archiving
+no-longer-needed mail is preferred over deleting it. It also offers three
+prompts — `temporary-email`, `verification-code`, and `mailbox-summary` —
+that walk an agent through those flows. The wording is reviewed in
+[issue #39](https://github.com/st3fan/mailbox-mcp/issues/39).
+
 ## Configuration
 
 The server is configured through environment variables and fails fast at

@@ -124,7 +124,12 @@ file (the container's working directory is `/`):
 Save, then hit **Refresh** in the MCP Servers panel; `mailbox-mcp` should show
 the eleven tools (`create_mailbox`, `create_random_mailbox`, `list_mailboxes`,
 `delete_mailbox`, `enable_mailbox`, `disable_mailbox`, `list_messages`,
-`read_message`, `mark_message_read`, `archive_message`, `delete_message`). Try
+`read_message`, `mark_message_read`, `archive_message`, `delete_message`) and
+three prompts (`temporary-email`, `verification-code`, `mailbox-summary`).
+The server also advertises instructions in the initialize handshake, telling
+agents what the server is for, that it cannot send email, and to prefer
+archiving over deleting (see
+[issue #39](https://github.com/st3fan/mailbox-mcp/issues/39)). Try
 it end to end by asking Cline to *"list mailboxes"*, then *"create a random
 mailbox"*, then — after sending an email to the created address — *"list
 messages"* (the message is stored by the Email Worker), *"read the newest
