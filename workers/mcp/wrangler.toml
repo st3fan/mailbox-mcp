@@ -14,7 +14,7 @@ compatibility_date = "2025-10-01"
 # read stored mail.
 
 [vars]
-MAILBOX_MCP_DOMAIN = "example.com"
+MAILBOX_MCP_DOMAIN = "outofscope.party"
 
 [[r2_buckets]]
 binding = "MAILBOX_MCP_STORE"
@@ -28,5 +28,5 @@ bucket_name = "mailbox-mcp-store"
 [[d1_databases]]
 binding = "MAILBOX_MCP_REGISTRY"
 database_name = "mailbox-mcp-registry"
-database_id = "REPLACE_AFTER_D1_CREATE"
+database_id = "e82a8e43-20f5-4993-a6bf-f83f03b670d6"
 migrations_dir = "migrations"
