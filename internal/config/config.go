@@ -3,8 +3,10 @@
 package config
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"os"
 	"strings"
@@ -40,6 +42,10 @@ const (
 
 	// DefaultTransport is the transport used when EnvTransport is unset.
 	DefaultTransport = "stdio"
+
+	// dotenvFile is read from the working directory to fill configuration
+	// variables that are not set in the environment.
+	dotenvFile = ".env"
 )
 
 // TransportStdio is the only supported transport in this iteration.
@@ -67,16 +73,30 @@ type Config struct {
 }
 
 // Load reads the configuration from the environment, applies defaults, and
-// validates it. It returns an error describing every problem it found, so a
+// validates it. Variables that are not set in the environment are filled from
+// a .env file in the working directory, if present; the environment always
+// wins. It returns an error describing every problem it found, so a
 // misconfigured server fails fast at startup.
 func Load() (Config, error) {
+	dotenv, err := readDotenv(dotenvFile)
+	if err != nil {
+		return Config{}, err
+	}
+	// value reads a variable from the environment, falling back to .env.
+	value := func(key string) string {
+		if v, ok := os.LookupEnv(key); ok {
+			return strings.TrimSpace(v)
+		}
+		return strings.TrimSpace(dotenv[key])
+	}
+
 	cfg := Config{
-		CloudflareAPIToken: strings.TrimSpace(os.Getenv(EnvCloudflareAPIToken)),
-		Domain:             strings.TrimSpace(os.Getenv(EnvDomain)),
-		EmailWorker:        strings.TrimSpace(os.Getenv(EnvEmailWorker)),
-		Transport:          strings.TrimSpace(os.Getenv(EnvTransport)),
-		MessagesAPIURL:     strings.TrimSpace(os.Getenv(EnvMessagesAPIURL)),
-		MessagesAPIToken:   strings.TrimSpace(os.Getenv(EnvMessagesAPIToken)),
+		CloudflareAPIToken: value(EnvCloudflareAPIToken),
+		Domain:             value(EnvDomain),
+		EmailWorker:        value(EnvEmailWorker),
+		Transport:          value(EnvTransport),
+		MessagesAPIURL:     value(EnvMessagesAPIURL),
+		MessagesAPIToken:   value(EnvMessagesAPIToken),
 	}
 	if cfg.EmailWorker == "" {
 		cfg.EmailWorker = DefaultEmailWorker
@@ -87,10 +107,10 @@ func Load() (Config, error) {
 
 	var errs []error
 	if cfg.CloudflareAPIToken == "" {
-		errs = append(errs, fmt.Errorf("%s is required", EnvCloudflareAPIToken))
+		errs = append(errs, fmt.Errorf("%s is required (set it in the environment or in .env)", EnvCloudflareAPIToken))
 	}
 	if cfg.Domain == "" {
-		errs = append(errs, fmt.Errorf("%s is required", EnvDomain))
+		errs = append(errs, fmt.Errorf("%s is required (set it in the environment or in .env)", EnvDomain))
 	} else if err := validateDomain(cfg.Domain); err != nil {
 		errs = append(errs, fmt.Errorf("%s: %w", EnvDomain, err))
 	}
@@ -102,7 +122,7 @@ func Load() (Config, error) {
 
 	// The messages API is required: the message tools need it to serve mail.
 	if cfg.MessagesAPIURL == "" || cfg.MessagesAPIToken == "" {
-		errs = append(errs, fmt.Errorf("both %s and %s are required", EnvMessagesAPIURL, EnvMessagesAPIToken))
+		errs = append(errs, fmt.Errorf("both %s and %s are required (set them in the environment or in .env)", EnvMessagesAPIURL, EnvMessagesAPIToken))
 	} else if err := validateBaseURL(cfg.MessagesAPIURL); err != nil {
 		errs = append(errs, fmt.Errorf("%s: %w", EnvMessagesAPIURL, err))
 	}
@@ -129,6 +149,52 @@ func validateBaseURL(raw string) error {
 		return fmt.Errorf("%q is not a valid base URL: missing host", raw)
 	}
 	return nil
+}
+
+// readDotenv parses a .env-style file into a map. A missing file is not an
+// error; the map is then empty. The format is kept minimal: KEY=VALUE lines,
+// blank lines and # comments ignored, an optional "export " prefix, and
+// optional surrounding quotes on values. Unknown keys are kept in the map but
+// only the known variables are consulted. Values are not trimmed here; Load
+// trims everything it uses.
+func readDotenv(path string) (map[string]string, error) {
+	f, err := os.Open(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	defer f.Close()
+
+	values := map[string]string{}
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimPrefix(line, "export ")
+		key, value, found := strings.Cut(line, "=")
+		if !found {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if len(value) >= 2 {
+			if (value[0] == '"' && value[len(value)-1] == '"') || (value[0] == '\'' && value[len(value)-1] == '\'') {
+				value = value[1 : len(value)-1]
+			}
+		}
+		if key == "" {
+			continue
+		}
+		values[key] = value
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	return values, nil
 }
 
 // validateDomain performs a basic sanity check on a domain name. Full DNS

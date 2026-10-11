@@ -33,7 +33,11 @@ catch-alls) are never listed or deleted.
 ## Configuration
 
 The server is configured through environment variables and fails fast at
-startup if anything is missing or invalid.
+startup if anything is missing or invalid. Variables that are not set in the
+environment are filled from a `.env` file in the working directory, if present:
+`KEY=VALUE` lines, `#` comments and blank lines ignored, optional surrounding
+quotes on values. The environment always wins over `.env`, and a missing
+`.env` is not an error.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
