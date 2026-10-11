@@ -8,7 +8,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "db:migrations:apply": "wrangler d1 migrations apply REGISTRY --remote",
-    "deploy": "npm run db:migrations:apply && wrangler deploy"
+    "deploy": "npm run db:migrations:apply && wrangler deploy",
+    "uninstall": "wrangler delete && wrangler d1 delete mailbox-registry && wrangler r2 bucket delete mailbox-mcp-mailbox-store"
   },
   "cloudflare": {
     "bindings": {

@@ -3,7 +3,7 @@
 mailbox-mcp is an MCP server for **temporary email addresses that actually
 receive mail**, running entirely on Cloudflare. With a domain onboarded to
 Cloudflare Email Routing, it creates and manages mailboxes — addresses whose
-mail is routed by a single catch-all Email Routing rule to an Email Worker
+mail is routed by a single catch-all Email Routing rule to the Worker
 and stored in R2 — and lets agents read and manage the mail they receive.
 
 The project is about **creating temporary email addresses, receiving email,
@@ -17,15 +17,14 @@ email.
 
 ## Architecture
 
-Everything runs on Cloudflare as two Workers with different responsibilities:
+Everything runs on Cloudflare as a single Worker with two entry points:
 
-1. **`workers/email-worker`** (`mailbox-mcp-email-worker`) — receives mail
-   routed by the catch-all rule, accepts only registered, enabled mailboxes
-   (via the shared mailbox registry), and stores accepted mail in R2.
-2. **`workers/mcp`** (`mailbox-mcp`) — serves the MCP endpoint as streamable
-   HTTP at `/mcp` (bearer-token auth), owns the mailbox registry (a D1
-   database shared with the email worker) and message storage (direct R2
-   access).
+1. **`email` handler** — receives mail routed by the catch-all rule, accepts
+   only registered, enabled mailboxes (via the mailbox registry), and stores
+   accepted mail in R2.
+2. **`fetch` handler** — serves the MCP endpoint as streamable HTTP at
+   `/mcp` (bearer-token auth), owns the mailbox registry (a D1 database)
+   and message storage (direct R2 access).
 
 Agents connect to `https://mailbox-mcp.<account>.workers.dev/mcp` as a
 remote MCP server.
@@ -48,7 +47,7 @@ remote MCP server.
 
 Addresses outside the configured domain are rejected locally, before any
 storage access; mail to unknown or disabled addresses on the domain is
-bounced by the email worker.
+bounced by the Worker.
 
 ## Agent guidance
 
@@ -68,16 +67,15 @@ The MCP worker is configured with wrangler vars, secrets, and bindings:
 | Binding | Kind | Meaning |
 |---|---|---|
 | `DOMAIN` | var | The single (dedicated) email domain to manage, e.g. `outofscope.party`. |
-| `MAILBOX_STORE` | R2 binding | The bucket the email worker stores mail in. |
-| `REGISTRY` | D1 binding | The mailbox registry, shared with the email worker. |
+| `MAILBOX_STORE` | R2 binding | The bucket the Worker stores received mail in. |
+| `REGISTRY` | D1 binding | The mailbox registry. |
 | `MCP_AUTH_TOKEN` | secret | Bearer token MCP clients must present at `/mcp`. |
 
-The email worker shares the R2 bucket and the D1 registry (see its
-`wrangler.toml`). **No Cloudflare API token is needed**: mailboxes are
+**No Cloudflare API token is needed**: mailboxes are
 registry entries, and the catch-all routing rule is configured once, by
 hand, in the dashboard.
 
-## Deploying
+## Install
 
 ### One-click install (Deploy to Cloudflare)
 
@@ -121,6 +119,40 @@ checklist above).
 `MCP_AUTH_TOKEN` private; anyone holding it can manage mailboxes and read
 stored mail.
 
+## Update
+
+- **Deploy-button installs** come with Cloudflare's git integration: every
+  push to your clone deploys automatically. To update, sync your clone with
+  upstream (GitHub: *Sync fork* → *Update branch*) and the new version
+  deploys itself, applying any new D1 migrations via the deploy script.
+- **CLI installs**: `git pull && npm install && npm run deploy` from
+  `workers/mcp` — the deploy script applies pending migrations (safe to
+  re-run; migrations are append-only).
+- **Rollback**: deploy an older commit (`git checkout v0.4.0 && npm run
+  deploy`), or use the dashboard (Workers → mailbox-mcp → Deployments →
+  Rollback).
+
+## Remove
+
+Order matters: stop mail delivery first, then remove the Worker, then the
+resources. **Deleting the Worker does not delete the D1 database or the R2
+bucket** — remove those explicitly, or your stored mail stays behind:
+
+1. Remove the catch-all rule (dashboard: Email Routing → Routing Rules →
+   Catch-all address → set to drop, or disable Email Routing for the
+   domain). Without this, mail to the domain bounces once the Worker is
+   gone.
+2. Remove the Worker and the resources (permanent — this deletes the
+   registry and **all stored mail**):
+
+   ```sh
+   cd workers/mcp && npm run uninstall
+   ```
+
+   which runs, with a confirmation prompt for each:
+   `npx wrangler delete`, `npx wrangler d1 delete mailbox-registry`, and
+   `npx wrangler r2 bucket delete mailbox-mcp-mailbox-store`.
+
 ## Using from an MCP client
 
 Add the server as a remote MCP server, e.g. in Cline's MCP settings or any
@@ -139,12 +171,11 @@ client that supports remote servers:
 
 ## Development
 
-Each worker is its own TypeScript project with vitest tests and `tsc` type
+The Worker is a TypeScript project with vitest tests and `tsc` type
 checking:
 
 ```sh
 cd workers/mcp && npm install && npm test && npm run typecheck
-cd workers/email-worker && npm install && npm test && npm run typecheck
 ```
 
 See [DEVELOPING.md](DEVELOPING.md) for the full runbook and

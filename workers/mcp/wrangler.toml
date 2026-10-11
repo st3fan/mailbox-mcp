@@ -2,9 +2,9 @@ name = "mailbox-mcp"
 main = "src/index.ts"
 compatibility_date = "2025-10-01"
 
-# The MCP worker serves streamable HTTP at /mcp and owns the mailbox registry
-# (REGISTRY D1 database) and message storage (the MAILBOX_STORE R2 binding,
-# shared with the email worker). Mail ingestion lives in workers/email-worker.
+# The consolidated Worker serves streamable HTTP at /mcp (fetch handler) and
+# ingests mail (email handler): it owns the mailbox registry (REGISTRY D1
+# database) and message storage (the MAILBOX_STORE R2 binding).
 #
 # Secrets (set once with wrangler secret put <NAME>):
 #   MCP_AUTH_TOKEN        bearer token MCP clients must present

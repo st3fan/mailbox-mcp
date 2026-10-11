@@ -1,18 +1,18 @@
 # DEVELOPING.md
 
-Developer runbook for mailbox-mcp, which runs entirely on Cloudflare as two
-Workers: `workers/mcp` (MCP endpoint + mailbox registry + message storage)
-and `workers/email-worker` (mail ingestion). See [PRODUCT.md](PRODUCT.md)
-for scope and [AGENTS.md](AGENTS.md) for working conventions.
+Developer runbook for mailbox-mcp, which runs entirely on Cloudflare as a
+single Worker: `workers/mcp` serves the MCP endpoint (with the mailbox
+registry and message storage) **and** ingests mail via its `email` handler.
+See [PRODUCT.md](PRODUCT.md) for scope and [AGENTS.md](AGENTS.md) for
+working conventions.
 
 > **Use a dedicated email domain.** A single catch-all routing rule routes
-> mail for *every* address on the domain to the email worker, which bounces
+> mail for *every* address on the domain to the Worker, which bounces
 > unknown addresses. The domain should be dedicated to mailbox-mcp.
 
 ## 1. Set up Cloudflare
 
-1. **Wrangler.** Install Cloudflare's CLI and log in — both workers are
-   deployed with it:
+1. **Wrangler.** Install Cloudflare's CLI and log in:
 
    ```sh
    npm install -g wrangler
@@ -23,7 +23,7 @@ for scope and [AGENTS.md](AGENTS.md) for working conventions.
    All `wrangler` commands below use this login; no API token is needed for
    deployments or for mailbox management. If your login sees more than one
    account, export `CLOUDFLARE_ACCOUNT_ID` (or add `account_id` to the
-   wrangler.toml files). Prefer not to install globally? Run commands as
+   wrangler.toml). Prefer not to install globally? Run commands as
    `npx wrangler ...` instead.
 
 2. **Domain on Cloudflare.** The (dedicated) email domain must be a zone in
@@ -31,46 +31,42 @@ for scope and [AGENTS.md](AGENTS.md) for working conventions.
    `workers/mcp/wrangler.toml`.
 3. **Enable Email Routing.** Dashboard → your domain → **Email → Email
    Routing** → enable. Cloudflare adds the required MX and SPF records.
-4. **Email Worker.** Create the R2 bucket and deploy the Email Worker:
+
+## 2. Deploy
+
+1. **Storage and registry.** Create the R2 bucket and the D1 registry, and
+   apply the schema migration:
 
    ```sh
    npx wrangler r2 bucket create mailbox-mcp-mailbox-store
-   cd workers/email-worker && npm install && npm run deploy
-   ```
-
-   (Storage layout and details:
-   [workers/email-worker/README.md](workers/email-worker/README.md).)
-
-## 2. Deploy the MCP worker
-
-1. **Mailbox registry (D1).** Create the database, apply the schema
-   migration, and paste the database ID into **both** workers'
-   `wrangler.toml` files:
-
-   ```sh
    npx wrangler d1 create mailbox-registry
-   npx wrangler d1 migrations apply mailbox-registry --remote
    ```
 
-2. **Deploy** the MCP worker and set its one secret:
+   Paste the database ID into `workers/mcp/wrangler.toml`, then:
 
    ```sh
    cd workers/mcp && npm install
-   npx wrangler secret put MCP_AUTH_TOKEN    # generate e.g. with: openssl rand -hex 32
-   npm run deploy
+   npx wrangler d1 migrations apply REGISTRY --remote
    ```
 
-   The worker then serves MCP as streamable HTTP at
+2. **Deploy** the Worker and set its one secret:
+
+   ```sh
+   npx wrangler secret put MCP_AUTH_TOKEN    # generate e.g. with: openssl rand -hex 32
+   npm run deploy                            # applies pending migrations, then deploys
+   ```
+
+   The Worker then serves MCP as streamable HTTP at
    `https://mailbox-mcp.<account>.workers.dev/mcp`. The endpoint is
    protected by the bearer token only — keep `MCP_AUTH_TOKEN` private.
 
 ## 3. Catch-all routing rule
 
 In the dashboard: **Email Routing → Routing Rules → Catch-all address →
-Edit** → action **Send to a Worker** → select `mailbox-mcp-email-worker`.
+Edit** → action **Send to a Worker** → select `mailbox-mcp`.
 
 This is a one-time, manual step. The catch-all routes mail for *every*
-address on the domain to the worker; the worker accepts only addresses
+address on the domain to the Worker; the Worker accepts only addresses
 registered in the mailbox registry and bounces everything else with
 "Address not found".
 
@@ -105,6 +101,41 @@ then, after sending an email to it, *"list messages"*, *"read the newest
 message"* (reading marks it as read automatically), *"archive it"* and
 *"delete it"*.
 
+## Updating
+
+- **CLI installs**: `git pull && npm install && npm run deploy` from
+  `workers/mcp`. The deploy script applies any pending D1 migrations before
+  deploying; migrations are append-only and safe to re-run.
+- **Deploy-button installs**: the button sets up Cloudflare's git
+  integration on your clone — **pushes deploy automatically**. To update,
+  sync your clone with upstream and push. Rollback: the dashboard
+  (Workers → mailbox-mcp → Deployments → Rollback) or deploy an older
+  commit.
+
+## Removing
+
+Order matters: stop mail delivery first, then remove the Worker, then the
+resources. **Deleting the Worker does not delete the D1 database or the R2
+bucket** — remove those explicitly, or your stored mail stays behind:
+
+1. Remove the catch-all rule (dashboard: Email Routing → Routing Rules →
+   Catch-all address → set to drop or disable Email Routing for the domain).
+2. Remove the Worker:
+
+   ```sh
+   cd workers/mcp && npx wrangler delete
+   ```
+
+3. Remove the resources (permanent — this deletes all stored mail):
+
+   ```sh
+   npx wrangler d1 delete mailbox-registry
+   npx wrangler r2 bucket delete mailbox-mcp-mailbox-store
+   ```
+
+Or run `npm run uninstall` from `workers/mcp`, which performs steps 2 and 3
+(each asks for confirmation).
+
 ## Migrating an existing per-address deployment
 
 Deployments from before the catch-all model have one Email Routing rule per
@@ -112,13 +143,13 @@ mailbox. Migrate in this order:
 
 1. Create the D1 registry and apply the migration (section 2, step 1).
 2. **Seed the registry with every existing mailbox** before deploying the
-   new email worker — use `workers/mcp/seed.sql` as a template
+   acceptance-checking Worker — use `workers/mcp/seed.sql` as a template
    (`npx wrangler d1 execute mailbox-registry --remote --file seed.sql`).
-   Unseeded addresses will bounce once the new email worker is live.
-3. Deploy the new MCP worker and email worker.
+   Unseeded addresses will bounce once the new Worker is live.
+3. Deploy the new Worker (section 2, step 2).
 4. Configure the catch-all rule (section 3).
 5. Delete the old per-address routing rules in the dashboard, and remove the
-   obsolete `CLOUDFLARE_API_TOKEN` secret from the MCP worker
+   obsolete `CLOUDFLARE_API_TOKEN` secret from the Worker
    (`npx wrangler secret delete CLOUDFLARE_API_TOKEN`).
 
 Old literal rules keep working until deleted (they take precedence over the
