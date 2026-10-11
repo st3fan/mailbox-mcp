@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import worker from "../src/index";
 import type { Env } from "../src/env";
+import { FakeD1 } from "./fake-d1";
 import { FakeR2Bucket } from "./fake-r2";
 
 const TOKEN = "test-mcp-token";
 const env: Env = {
   MAILBOX_STORE: new FakeR2Bucket() as unknown as R2Bucket,
+  REGISTRY: new FakeD1() as unknown as D1Database,
   DOMAIN: "outofscope.party",
   EMAIL_WORKER: "mailbox-mcp-email-worker",
   CLOUDFLARE_API_TOKEN: "test-cf-token",
