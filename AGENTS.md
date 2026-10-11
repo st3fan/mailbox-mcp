@@ -8,7 +8,7 @@ Guidance for AI agents (and humans) working in this repository.
   — `workers/mcp` (the MCP endpoint + message storage) and
   `workers/email-worker` (mail ingestion into R2) — each with its own
   package, vitest tests, and `tsc` type checking. Follow the style of the
-  existing worker code; there is no Go in this repository anymore.
+  existing worker code.
 - **Packaging:** Workers deploy with `wrangler deploy` per worker directory.
   Configuration lives in wrangler vars and secrets, not environment files.
 
@@ -59,5 +59,3 @@ Guidance for AI agents (and humans) working in this repository.
   ```
   Both must be clean. When a change affects a deployed worker, deploy it to
   verify before requesting review.
-- Work is planned in GitHub issues and lands via PRs, preferably as stacks
-  (see below); reference the issue in commits and pull requests.
