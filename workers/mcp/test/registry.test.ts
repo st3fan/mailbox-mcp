@@ -17,37 +17,37 @@ function db() {
 describe("createMailbox", () => {
   it("inserts an enabled mailbox with a created_at timestamp", async () => {
     const d = db();
-    const created = await createMailbox(d, "alice@outofscope.party");
+    const created = await createMailbox(d, "alice@example.com");
     expect(created).toMatchObject({
-      address: "alice@outofscope.party",
+      address: "alice@example.com",
       enabled: true,
     });
     expect(created.created_at).toBeTruthy();
 
-    const read = await getMailbox(d, "alice@outofscope.party");
+    const read = await getMailbox(d, "alice@example.com");
     expect(read).toEqual(created);
   });
 
   it("throws RegistryConflictError on duplicate addresses", async () => {
     const d = db();
-    await createMailbox(d, "alice@outofscope.party");
-    await expect(createMailbox(d, "alice@outofscope.party")).rejects.toBeInstanceOf(RegistryConflictError);
-    await expect(createMailbox(d, "alice@outofscope.party")).rejects.toThrow("already exists");
+    await createMailbox(d, "alice@example.com");
+    await expect(createMailbox(d, "alice@example.com")).rejects.toBeInstanceOf(RegistryConflictError);
+    await expect(createMailbox(d, "alice@example.com")).rejects.toThrow("already exists");
   });
 });
 
 describe("listMailboxes", () => {
   it("returns all entries sorted by address", async () => {
     const d = db();
-    await createMailbox(d, "zeta@outofscope.party");
-    await createMailbox(d, "alpha@outofscope.party");
-    await createMailbox(d, "mid@outofscope.party");
+    await createMailbox(d, "zeta@example.com");
+    await createMailbox(d, "alpha@example.com");
+    await createMailbox(d, "mid@example.com");
 
     const list = await listMailboxes(d);
     expect(list.map((m) => m.address)).toEqual([
-      "alpha@outofscope.party",
-      "mid@outofscope.party",
-      "zeta@outofscope.party",
+      "alpha@example.com",
+      "mid@example.com",
+      "zeta@example.com",
     ]);
     expect(list.every((m) => typeof m.created_at === "string")).toBe(true);
   });
@@ -60,18 +60,18 @@ describe("listMailboxes", () => {
 describe("setMailboxEnabled", () => {
   it("flips the flag without touching other fields", async () => {
     const d = db();
-    const created = await createMailbox(d, "alice@outofscope.party");
+    const created = await createMailbox(d, "alice@example.com");
 
-    const disabled = await setMailboxEnabled(d, "alice@outofscope.party", false);
+    const disabled = await setMailboxEnabled(d, "alice@example.com", false);
     expect(disabled).toEqual({ ...created, enabled: false });
 
-    const enabled = await setMailboxEnabled(d, "alice@outofscope.party", true);
+    const enabled = await setMailboxEnabled(d, "alice@example.com", true);
     expect(enabled.enabled).toBe(true);
   });
 
   it("throws on unknown mailboxes", async () => {
-    await expect(setMailboxEnabled(db(), "gone@outofscope.party", true)).rejects.toThrow(
-      'mailbox "gone@outofscope.party" not found',
+    await expect(setMailboxEnabled(db(), "gone@example.com", true)).rejects.toThrow(
+      'mailbox "gone@example.com" not found',
     );
   });
 });
@@ -79,14 +79,14 @@ describe("setMailboxEnabled", () => {
 describe("deleteMailbox", () => {
   it("removes the registry entry", async () => {
     const d = db();
-    await createMailbox(d, "alice@outofscope.party");
-    await deleteMailbox(d, "alice@outofscope.party");
-    expect(await getMailbox(d, "alice@outofscope.party")).toBeNull();
+    await createMailbox(d, "alice@example.com");
+    await deleteMailbox(d, "alice@example.com");
+    expect(await getMailbox(d, "alice@example.com")).toBeNull();
   });
 
   it("throws on unknown mailboxes", async () => {
-    await expect(deleteMailbox(db(), "gone@outofscope.party")).rejects.toThrow(
-      'mailbox "gone@outofscope.party" not found',
+    await expect(deleteMailbox(db(), "gone@example.com")).rejects.toThrow(
+      'mailbox "gone@example.com" not found',
     );
   });
 });

@@ -14,7 +14,7 @@ const TOKEN = "test-mcp-token";
 const env: Env = {
   MAILBOX_STORE: new FakeR2Bucket() as unknown as R2Bucket,
   REGISTRY: new FakeD1() as unknown as D1Database,
-  DOMAIN: "outofscope.party",
+  DOMAIN: "example.com",
   MCP_AUTH_TOKEN: TOKEN,
 };
 const ctx = { waitUntil: () => {}, passThroughOnException: () => {} } as unknown as ExecutionContext;
@@ -62,17 +62,17 @@ beforeEach(() => {
 
 describe("create_mailbox", () => {
   it("creates a registered, enabled mailbox", async () => {
-    const { isError, text } = await callTool(1, "create_mailbox", { address: "alice@outofscope.party" });
+    const { isError, text } = await callTool(1, "create_mailbox", { address: "alice@example.com" });
     expect(isError).toBe(false);
     const out = JSON.parse(text);
-    expect(out).toMatchObject({ address: "alice@outofscope.party", enabled: true });
+    expect(out).toMatchObject({ address: "alice@example.com", enabled: true });
     expect(out.created_at).toBeTruthy();
-    expect(registry().has("alice@outofscope.party")).toBe(true);
+    expect(registry().has("alice@example.com")).toBe(true);
   });
 
   it("errors on duplicate addresses", async () => {
-    await callTool(2, "create_mailbox", { address: "alice@outofscope.party" });
-    const { isError, text } = await callTool(3, "create_mailbox", { address: "alice@outofscope.party" });
+    await callTool(2, "create_mailbox", { address: "alice@example.com" });
+    const { isError, text } = await callTool(3, "create_mailbox", { address: "alice@example.com" });
     expect(isError).toBe(true);
     expect(text).toContain("already exists");
   });
@@ -80,33 +80,33 @@ describe("create_mailbox", () => {
   it("rejects off-domain addresses locally", async () => {
     const { isError, text } = await callTool(4, "create_mailbox", { address: "alice@elsewhere.example" });
     expect(isError).toBe(true);
-    expect(text).toContain("is not a mailbox on outofscope.party");
+    expect(text).toContain("is not a mailbox on example.com");
     expect(registry().size).toBe(0);
   });
 });
 
 describe("create_random_mailbox", () => {
   it("creates a mailbox with a generated name", async () => {
-    randomAddress.mockReturnValue("alpha.bravo@outofscope.party");
+    randomAddress.mockReturnValue("alpha.bravo@example.com");
     const { isError, text } = await callTool(5, "create_random_mailbox", {});
     expect(isError).toBe(false);
     const out = JSON.parse(text);
-    expect(out).toMatchObject({ address: "alpha.bravo@outofscope.party", enabled: true });
-    expect(registry().has("alpha.bravo@outofscope.party")).toBe(true);
+    expect(out).toMatchObject({ address: "alpha.bravo@example.com", enabled: true });
+    expect(registry().has("alpha.bravo@example.com")).toBe(true);
   });
 
   it("retries with a new name when the generated address already exists", async () => {
-    (env.REGISTRY as unknown as FakeD1).rows.set("taken@outofscope.party", { enabled: 1, created_at: "x" });
-    randomAddress.mockReturnValueOnce("taken@outofscope.party").mockReturnValueOnce("fresh@outofscope.party");
+    (env.REGISTRY as unknown as FakeD1).rows.set("taken@example.com", { enabled: 1, created_at: "x" });
+    randomAddress.mockReturnValueOnce("taken@example.com").mockReturnValueOnce("fresh@example.com");
 
     const { isError, text } = await callTool(6, "create_random_mailbox", {});
     expect(isError).toBe(false);
-    expect(JSON.parse(text).address).toBe("fresh@outofscope.party");
+    expect(JSON.parse(text).address).toBe("fresh@example.com");
   });
 
   it("gives up after three conflicts", async () => {
-    (env.REGISTRY as unknown as FakeD1).rows.set("taken@outofscope.party", { enabled: 1, created_at: "x" });
-    randomAddress.mockReturnValue("taken@outofscope.party");
+    (env.REGISTRY as unknown as FakeD1).rows.set("taken@example.com", { enabled: 1, created_at: "x" });
+    randomAddress.mockReturnValue("taken@example.com");
 
     const { isError, text } = await callTool(7, "create_random_mailbox", {});
     expect(isError).toBe(true);
@@ -116,57 +116,57 @@ describe("create_random_mailbox", () => {
 
 describe("list_mailboxes", () => {
   it("lists registry entries sorted by address", async () => {
-    await callTool(8, "create_mailbox", { address: "zeta@outofscope.party" });
-    await callTool(9, "create_mailbox", { address: "alpha@outofscope.party" });
+    await callTool(8, "create_mailbox", { address: "zeta@example.com" });
+    await callTool(9, "create_mailbox", { address: "alpha@example.com" });
 
     const { isError, text } = await callTool(10, "list_mailboxes", {});
     expect(isError).toBe(false);
     const out = JSON.parse(text);
     expect(out.mailboxes.map((m: { address: string }) => m.address))
-      .toEqual(["alpha@outofscope.party", "zeta@outofscope.party"]);
+      .toEqual(["alpha@example.com", "zeta@example.com"]);
   });
 });
 
 describe("delete_mailbox", () => {
   it("removes the registry entry and all stored messages", async () => {
-    await callTool(11, "create_mailbox", { address: "alpha@outofscope.party" });
+    await callTool(11, "create_mailbox", { address: "alpha@example.com" });
     // Two messages for alpha, plus one for another mailbox that must survive.
-    await putMessage("alpha@outofscope.party", "1-a", "s", "raw one");
-    await putMessage("alpha@outofscope.party", "2-b", "s", "raw two");
-    await putMessage("beta@outofscope.party", "1-c", "s", "raw three");
+    await putMessage("alpha@example.com", "1-a", "s", "raw one");
+    await putMessage("alpha@example.com", "2-b", "s", "raw two");
+    await putMessage("beta@example.com", "1-c", "s", "raw three");
 
-    const { isError, text } = await callTool(12, "delete_mailbox", { address: "alpha@outofscope.party" });
+    const { isError, text } = await callTool(12, "delete_mailbox", { address: "alpha@example.com" });
     expect(isError).toBe(false);
-    expect(JSON.parse(text)).toEqual({ address: "alpha@outofscope.party", deleted: true });
-    expect(registry().has("alpha@outofscope.party")).toBe(false);
+    expect(JSON.parse(text)).toEqual({ address: "alpha@example.com", deleted: true });
+    expect(registry().has("alpha@example.com")).toBe(false);
 
     const bucket = env.MAILBOX_STORE as unknown as FakeR2Bucket;
-    expect(bucket.keys().filter((k) => k.startsWith("alpha@outofscope.party/"))).toEqual([]);
-    expect(bucket.keys().filter((k) => k.startsWith("beta@outofscope.party/"))).toHaveLength(2);
+    expect(bucket.keys().filter((k) => k.startsWith("alpha@example.com/"))).toEqual([]);
+    expect(bucket.keys().filter((k) => k.startsWith("beta@example.com/"))).toHaveLength(2);
   });
 
   it("404s unknown mailboxes", async () => {
-    const { isError, text } = await callTool(13, "delete_mailbox", { address: "gone@outofscope.party" });
+    const { isError, text } = await callTool(13, "delete_mailbox", { address: "gone@example.com" });
     expect(isError).toBe(true);
-    expect(text).toContain('mailbox "gone@outofscope.party" not found');
+    expect(text).toContain('mailbox "gone@example.com" not found');
   });
 });
 
 describe("enable_mailbox and disable_mailbox", () => {
   it("flip the enabled flag", async () => {
-    await callTool(14, "create_mailbox", { address: "alpha@outofscope.party" });
+    await callTool(14, "create_mailbox", { address: "alpha@example.com" });
 
-    const disable = await callTool(15, "disable_mailbox", { address: "alpha@outofscope.party" });
+    const disable = await callTool(15, "disable_mailbox", { address: "alpha@example.com" });
     expect(disable.isError).toBe(false);
-    expect(JSON.parse(disable.text)).toMatchObject({ address: "alpha@outofscope.party", enabled: false });
+    expect(JSON.parse(disable.text)).toMatchObject({ address: "alpha@example.com", enabled: false });
 
-    const enable = await callTool(16, "enable_mailbox", { address: "alpha@outofscope.party" });
+    const enable = await callTool(16, "enable_mailbox", { address: "alpha@example.com" });
     expect(enable.isError).toBe(false);
     expect(JSON.parse(enable.text).enabled).toBe(true);
   });
 
   it("404 unknown mailboxes", async () => {
-    const disable = await callTool(17, "disable_mailbox", { address: "gone@outofscope.party" });
+    const disable = await callTool(17, "disable_mailbox", { address: "gone@example.com" });
     expect(disable.isError).toBe(true);
     expect(disable.text).toContain("not found");
   });

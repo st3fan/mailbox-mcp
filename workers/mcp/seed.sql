@@ -6,5 +6,5 @@
 --   npx wrangler d1 execute mailbox-registry --remote --file seed.sql
 --
 -- Edit the list to match the live mailboxes (one row per address):
-INSERT INTO mailboxes (address) VALUES ('alice@outofscope.party');
-INSERT INTO mailboxes (address) VALUES ('bob@outofscope.party');
+INSERT INTO mailboxes (address) VALUES ('alice@example.com');
+INSERT INTO mailboxes (address) VALUES ('bob@example.com');

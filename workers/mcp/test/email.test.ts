@@ -8,7 +8,7 @@ import { FakeR2Bucket } from "./fake-r2";
 const env: Env = {
   MAILBOX_STORE: new FakeR2Bucket() as unknown as R2Bucket,
   REGISTRY: new FakeD1() as unknown as D1Database,
-  DOMAIN: "outofscope.party",
+  DOMAIN: "example.com",
   MCP_AUTH_TOKEN: "unused-for-email",
 };
 const ctx = { waitUntil: () => {}, passThroughOnException: () => {} } as unknown as ExecutionContext;
@@ -55,15 +55,15 @@ beforeEach(() => {
   (env.REGISTRY as unknown as FakeD1).lookupFails = false;
   rejectCalls.length = 0;
   // The happy-path test mailboxes are registered and enabled.
-  registry().set("alice@outofscope.party", { enabled: 1, created_at: "x" });
-  registry().set("bob@outofscope.party", { enabled: 1, created_at: "x" });
+  registry().set("alice@example.com", { enabled: 1, created_at: "x" });
+  registry().set("bob@example.com", { enabled: 1, created_at: "x" });
 });
 
 describe("email ingestion: storage", () => {
   it("stores the raw message and metadata for a registered mailbox", async () => {
     const message = fakeEmailMessage(
       "sender@example.com",
-      "Alice@Outofscope.Party",
+      "Alice@example.com",
       { "message-id": "<m1@example.com>", subject: "Hi" },
       "raw message body",
     );
@@ -72,8 +72,8 @@ describe("email ingestion: storage", () => {
 
     const keys = [...bucket().objects.keys()].sort();
     expect(keys).toHaveLength(2);
-    expect(keys[0]).toMatch(/^alice@outofscope\.party\/\d{13}-m1@example\.com\.eml$/);
-    expect(keys[1]).toMatch(/^alice@outofscope\.party\/\d{13}-m1@example\.com\.json$/);
+    expect(keys[0]).toMatch(/^alice@example.com\/\d{13}-m1@example\.com\.eml$/);
+    expect(keys[1]).toMatch(/^alice@example.com\/\d{13}-m1@example\.com\.json$/);
 
     const storedRaw = bucket().objects.get(keys[0]!)!;
     expect(new TextDecoder().decode(storedRaw.body)).toBe("raw message body");
@@ -82,8 +82,8 @@ describe("email ingestion: storage", () => {
     expect(storedMeta.contentType).toBe("application/json");
     const meta = JSON.parse(new TextDecoder().decode(storedMeta.body));
     expect(meta).toMatchObject({
-      mailbox: "alice@outofscope.party",
-      to: "alice@outofscope.party",
+      mailbox: "alice@example.com",
+      to: "alice@example.com",
       from: "sender@example.com",
       read: false,
       archived: false,
@@ -96,7 +96,7 @@ describe("email ingestion: storage", () => {
     // Metadata is written last: if the raw put throws, nothing readable is
     // listed by the message listing, which only reads metadata objects.
     const failingRegistry = new FakeD1();
-    failingRegistry.rows.set("bob@outofscope.party", { enabled: 1, created_at: "x" });
+    failingRegistry.rows.set("bob@example.com", { enabled: 1, created_at: "x" });
     const failingBucket = {
       put(key: string) {
         if (key.endsWith(".eml")) {
@@ -108,18 +108,18 @@ describe("email ingestion: storage", () => {
     const failingEnv: Env = {
       MAILBOX_STORE: failingBucket,
       REGISTRY: failingRegistry as unknown as D1Database,
-      DOMAIN: "outofscope.party",
+      DOMAIN: "example.com",
       MCP_AUTH_TOKEN: "x",
     };
 
-    const message = fakeEmailMessage("sender@example.com", "bob@outofscope.party", {}, "body");
+    const message = fakeEmailMessage("sender@example.com", "bob@example.com", {}, "body");
     await expect(worker.email(message, failingEnv, ctx)).rejects.toThrow("storage down");
   });
 });
 
 describe("email ingestion: acceptance check", () => {
   it("rejects unknown addresses with Address not found", async () => {
-    const message = fakeEmailMessage("sender@example.com", "nobody@outofscope.party", {}, "body");
+    const message = fakeEmailMessage("sender@example.com", "nobody@example.com", {}, "body");
 
     await worker.email(message, env, ctx);
 
@@ -128,8 +128,8 @@ describe("email ingestion: acceptance check", () => {
   });
 
   it("rejects disabled mailboxes with Mailbox disabled", async () => {
-    registry().set("bob@outofscope.party", { enabled: 0, created_at: "x" });
-    const message = fakeEmailMessage("sender@example.com", "bob@outofscope.party", {}, "body");
+    registry().set("bob@example.com", { enabled: 0, created_at: "x" });
+    const message = fakeEmailMessage("sender@example.com", "bob@example.com", {}, "body");
 
     await worker.email(message, env, ctx);
 
@@ -139,7 +139,7 @@ describe("email ingestion: acceptance check", () => {
 
   it("throws on registry lookup failure so delivery is deferred, not bounced", async () => {
     (env.REGISTRY as unknown as FakeD1).lookupFails = true;
-    const message = fakeEmailMessage("sender@example.com", "alice@outofscope.party", {}, "body");
+    const message = fakeEmailMessage("sender@example.com", "alice@example.com", {}, "body");
 
     await expect(worker.email(message, env, ctx)).rejects.toThrow("mailbox registry lookup failed");
     expect(rejectCalls).toEqual([]);

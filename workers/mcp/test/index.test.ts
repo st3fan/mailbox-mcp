@@ -9,7 +9,7 @@ const TOKEN = "test-mcp-token";
 const env: Env = {
   MAILBOX_STORE: new FakeR2Bucket() as unknown as R2Bucket,
   REGISTRY: new FakeD1() as unknown as D1Database,
-  DOMAIN: "outofscope.party",
+  DOMAIN: "example.com",
   MCP_AUTH_TOKEN: TOKEN,
 };
 const ctx = { waitUntil: () => {}, passThroughOnException: () => {} } as unknown as ExecutionContext;
@@ -109,9 +109,9 @@ describe("mcp", () => {
     expect(withoutArgs.data.result.messages[0].content.text).toContain("infer it from the task at hand");
 
     const summary = await rpc(6, "prompts/get", {
-      name: "mailbox-summary", arguments: { address: "alice@outofscope.party" },
+      name: "mailbox-summary", arguments: { address: "alice@example.com" },
     });
-    expect(summary.data.result.messages[0].content.text).toContain("alice@outofscope.party");
+    expect(summary.data.result.messages[0].content.text).toContain("alice@example.com");
   });
 
   it("errors clearly when a required prompt argument is missing", async () => {

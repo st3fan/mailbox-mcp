@@ -14,7 +14,7 @@ compatibility_date = "2025-10-01"
 # read stored mail.
 
 [vars]
-DOMAIN = "outofscope.party"
+DOMAIN = "example.com"
 
 [[r2_buckets]]
 binding = "MAILBOX_STORE"
