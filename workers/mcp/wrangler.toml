@@ -26,5 +26,5 @@ bucket_name = "mailbox-mcp-mailbox-store"
 [[d1_databases]]
 binding = "REGISTRY"
 database_name = "mailbox-registry"
-database_id = "REPLACE_AFTER_D1_CREATE"
+database_id = "1326f8ce-a528-4d3c-be63-1e04a4fe9886"
 migrations_dir = "migrations"
