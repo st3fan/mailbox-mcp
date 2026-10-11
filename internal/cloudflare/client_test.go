@@ -3,6 +3,7 @@ package cloudflare
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -222,5 +223,124 @@ func TestNonJSONResponse(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "HTTP 502") {
 		t.Errorf("error = %q, want it to mention HTTP 502", err.Error())
+	}
+}
+
+func TestUpdateRuleStatus(t *testing.T) {
+	// The existing rule on the fake API, as GET returns it.
+	existingRule := Rule{
+		ID:       "rule-1",
+		Name:     "ada@mail.example.com",
+		Enabled:  true,
+		Matchers: []Matcher{{Type: "literal", Field: "to", Value: "ada@mail.example.com"}},
+		Actions:  []Action{{Type: "worker", Value: []string{"mailbox-mcp-email-worker"}}},
+	}
+
+	tests := []struct {
+		name      string
+		enabled   bool
+		getStatus int
+		putStatus int
+		body      string
+		wantErr   string
+	}{
+		{
+			name:      "enable writes back the full rule with enabled true",
+			enabled:   true,
+			getStatus: http.StatusOK,
+			putStatus: http.StatusOK,
+		},
+		{
+			name:      "disable writes back the full rule with enabled false",
+			enabled:   false,
+			getStatus: http.StatusOK,
+			putStatus: http.StatusOK,
+		},
+		{
+			name:      "get failure surfaces the API error",
+			enabled:   true,
+			getStatus: http.StatusNotFound,
+			body:      `{"success":false,"errors":[{"code":404,"message":"routing rule not found"}],"result":null}`,
+			wantErr:   "error 404: routing rule not found",
+		},
+		{
+			name:      "put failure surfaces the API error",
+			enabled:   true,
+			getStatus: http.StatusOK,
+			putStatus: http.StatusForbidden,
+			body:      `{"success":false,"errors":[{"code":10000,"message":"Authentication error"}],"result":null}`,
+			wantErr:   "error 10000: Authentication error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotMethod string
+			var gotBody string
+			requests := 0
+			client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				requests++
+				if r.URL.Path != "/zones/zone-1/email/routing/rules/rule-1" {
+					t.Errorf("unexpected request: %s %s", r.Method, r.URL)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				switch r.Method {
+				case http.MethodGet:
+					gotMethod = r.Method
+					if tt.getStatus != http.StatusOK {
+						w.WriteHeader(tt.getStatus)
+						w.Write([]byte(tt.body))
+						return
+					}
+					w.Write(envelopeJSON(t, existingRule))
+				case http.MethodPut:
+					gotMethod = r.Method
+					raw, err := io.ReadAll(r.Body)
+					if err != nil {
+						t.Errorf("read body: %v", err)
+					}
+					gotBody = string(raw)
+					if tt.putStatus != http.StatusOK {
+						w.WriteHeader(tt.putStatus)
+						w.Write([]byte(tt.body))
+						return
+					}
+					w.Write(envelopeJSON(t, existingRule))
+				default:
+					t.Errorf("unexpected method %s", r.Method)
+				}
+			})
+
+			err := client.UpdateRuleStatus(context.Background(), "zone-1", "rule-1", tt.enabled)
+
+			if tt.wantErr != "" {
+				if err == nil {
+					t.Fatal("UpdateRuleStatus() = nil, want error")
+				}
+				if !strings.Contains(err.Error(), tt.wantErr) {
+					t.Errorf("UpdateRuleStatus() error = %q, want it to contain %q", err.Error(), tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("UpdateRuleStatus() error = %v, want nil", err)
+			}
+			if requests != 2 {
+				t.Errorf("made %d requests, want 2 (GET then PUT)", requests)
+			}
+			if gotMethod != http.MethodPut {
+				t.Errorf("last request method = %q, want PUT", gotMethod)
+			}
+			var sent Rule
+			if err := json.Unmarshal([]byte(gotBody), &sent); err != nil {
+				t.Fatalf("decode sent body: %v", err)
+			}
+			if sent.ID != existingRule.ID || !reflect.DeepEqual(sent.Matchers, existingRule.Matchers) || !reflect.DeepEqual(sent.Actions, existingRule.Actions) {
+				t.Errorf("PUT body rule = %+v, want the full existing rule", sent)
+			}
+			if sent.Enabled != tt.enabled {
+				t.Errorf("PUT body enabled = %v, want %v", sent.Enabled, tt.enabled)
+			}
+		})
 	}
 }

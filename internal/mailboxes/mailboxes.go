@@ -22,6 +22,7 @@ type client interface {
 	ListRules(ctx context.Context, zoneID string) ([]cloudflare.Rule, error)
 	CreateMailboxRule(ctx context.Context, zoneID, address, worker string) (*cloudflare.Rule, error)
 	DeleteRule(ctx context.Context, zoneID, ruleID string) error
+	UpdateRuleStatus(ctx context.Context, zoneID, ruleID string, enabled bool) error
 }
 
 // Register wires the mailbox tools onto the server.
@@ -40,6 +41,16 @@ func Register(srv *mcp.Server, cfg config.Config, zoneID string, client client) 
 		Name:        "delete_mailbox",
 		Description: fmt.Sprintf("Delete a mailbox on %s. The mailbox must have been created by mailbox-mcp.", cfg.Domain),
 	}, deleteMailbox(cfg, zoneID, client))
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "enable_mailbox",
+		Description: fmt.Sprintf("Enable a mailbox on %s: mail to the address is routed to the %s worker again.", cfg.Domain, cfg.EmailWorker),
+	}, enableMailbox(cfg, zoneID, client))
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "disable_mailbox",
+		Description: fmt.Sprintf("Disable a mailbox on %s: the mailbox keeps existing but mail to the address is no longer routed to the %s worker.", cfg.Domain, cfg.EmailWorker),
+	}, disableMailbox(cfg, zoneID, client))
 }
 
 // createInput is the input of the create_mailbox tool.
@@ -129,6 +140,52 @@ func deleteMailbox(cfg config.Config, zoneID string, client client) mcp.ToolHand
 		}
 		return nil, deleteOutput{}, fmt.Errorf("mailbox %q not found", address)
 	}
+}
+
+// enableInput is the input of the enable_mailbox tool.
+type enableInput struct {
+	// Address is the full mailbox address to enable.
+	Address string `json:"address" jsonschema:"the mailbox address to enable"`
+}
+
+func enableMailbox(cfg config.Config, zoneID string, client client) mcp.ToolHandlerFor[enableInput, mailbox] {
+	return func(ctx context.Context, req *mcp.CallToolRequest, input enableInput) (*mcp.CallToolResult, mailbox, error) {
+		return setMailboxEnabled(ctx, cfg, zoneID, client, input.Address, true)
+	}
+}
+
+// disableInput is the input of the disable_mailbox tool.
+type disableInput struct {
+	// Address is the full mailbox address to disable.
+	Address string `json:"address" jsonschema:"the mailbox address to disable"`
+}
+
+func disableMailbox(cfg config.Config, zoneID string, client client) mcp.ToolHandlerFor[disableInput, mailbox] {
+	return func(ctx context.Context, req *mcp.CallToolRequest, input disableInput) (*mcp.CallToolResult, mailbox, error) {
+		return setMailboxEnabled(ctx, cfg, zoneID, client, input.Address, false)
+	}
+}
+
+// setMailboxEnabled resolves the mailbox by address and sets the enabled flag
+// of its routing rule. It is the shared implementation of enable and disable.
+func setMailboxEnabled(ctx context.Context, cfg config.Config, zoneID string, client client, address string, enabled bool) (*mcp.CallToolResult, mailbox, error) {
+	address = strings.TrimSpace(address)
+	if err := validateAddress(address, cfg.Domain); err != nil {
+		return nil, mailbox{}, err
+	}
+	rules, err := client.ListRules(ctx, zoneID)
+	if err != nil {
+		return nil, mailbox{}, err
+	}
+	for _, rule := range rules {
+		if ruleAddress, ok := mailboxAddress(rule, cfg.EmailWorker); ok && strings.EqualFold(ruleAddress, address) {
+			if err := client.UpdateRuleStatus(ctx, zoneID, rule.ID, enabled); err != nil {
+				return nil, mailbox{}, err
+			}
+			return nil, mailbox{Address: address, RuleID: rule.ID, Enabled: enabled}, nil
+		}
+	}
+	return nil, mailbox{}, fmt.Errorf("mailbox %q not found", address)
 }
 
 // mailboxAddress returns the mailbox address of a rule if the rule is a

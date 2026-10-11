@@ -17,6 +17,8 @@ managing the mailbox**. It deliberately has no functionality to send email. See
 | `create_mailbox` | Create a mailbox: an Email Routing rule routing the address to the Email Worker. |
 | `list_mailboxes` | List mailboxes managed by mailbox-mcp on the configured domain. |
 | `delete_mailbox` | Delete a mailbox by address. |
+| `enable_mailbox` | Re-activate a mailbox: mail to the address is routed again. |
+| `disable_mailbox` | De-activate a mailbox: it keeps existing but mail is no longer routed. |
 
 Addresses outside the configured domain are rejected locally, before any API
 call. Other routing rules that may exist on the domain (forwarding rules,
