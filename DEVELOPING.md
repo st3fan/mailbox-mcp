@@ -68,7 +68,8 @@ reading and managing the messages those mailboxes receive. See
 | `MAILBOX_MCP_CLOUDFLARE_API_TOKEN` | yes | the token from step 6 |
 | `MAILBOX_MCP_DOMAIN` | yes | `mail.example.com` |
 | `MAILBOX_MCP_EMAIL_WORKER` | no (default `mailbox-mcp-email-worker`) | — |
-| `MAILBOX_MCP_TRANSPORT` | no (default `stdio`) | — |
+| `MAILBOX_MCP_TRANSPORT` | no (default `stdio`) | `stdio` or `http` |
+| `MAILBOX_MCP_HTTP_ADDR` | no (default `localhost:8080`) | `0.0.0.0:8080` |
 | `MAILBOX_MCP_MESSAGES_API_URL` | yes | `https://messages.example.com` |
 | `MAILBOX_MCP_MESSAGES_API_TOKEN` | yes | the token from step 5 |
 
@@ -85,6 +86,27 @@ Or via Docker — mount a `.env` into the container's working directory:
 docker build -t mailbox-mcp .
 docker run -i --rm -v "$PWD/.env:/.env:ro" mailbox-mcp
 ```
+
+### HTTP transport
+
+Besides stdio, the server can serve MCP as streamable HTTP at `/mcp` — useful
+to run one server and connect several clients to it as a remote server:
+
+```sh
+MAILBOX_MCP_TRANSPORT=http go run ./cmd/mailbox-mcp
+# serving http://localhost:8080/mcp
+```
+
+Inside Docker, bind `0.0.0.0` so the port mapping can reach the endpoint:
+
+```sh
+docker run --rm -p 8080:8080 -v "$PWD/.env:/.env:ro" \
+  -e MAILBOX_MCP_TRANSPORT=http -e MAILBOX_MCP_HTTP_ADDR=0.0.0.0:8080 mailbox-mcp
+```
+
+The MCP endpoint has no authentication; keep it on localhost or trusted
+networks. The SSE transport is deliberately not supported: it is deprecated
+in the MCP specification.
 
 The server fails fast at startup if the token/domain is missing or the domain
 does not resolve to a zone the token can see — fix the error it prints before

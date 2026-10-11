@@ -22,7 +22,9 @@ The project has two parts:
 1. **Email Worker on Cloudflare** — receives email routed by Email Routing rules and
    stores it in R2.
 2. **MCP server** — a self-hosted MCP server that you can run anywhere. It talks to
-   the Cloudflare side using an API key.
+   the Cloudflare side using an API key. The server speaks MCP over stdio and as
+   streamable HTTP at `/mcp`; the deprecated SSE transport is deliberately not
+   supported.
 
 For mailbox management (creating and deleting mailboxes), the MCP server talks
 directly to Cloudflare's Email Routing API using a scoped API token; no

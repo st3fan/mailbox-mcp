@@ -55,7 +55,8 @@ quotes on values. The environment always wins over `.env`, and a missing
 | `MAILBOX_MCP_CLOUDFLARE_API_TOKEN` | yes | — | Cloudflare API token with **Zone → Email Routing Rules → Edit** permission for the domain's zone. |
 | `MAILBOX_MCP_DOMAIN` | yes | — | The single email domain to manage, e.g. `mail.example.com`. |
 | `MAILBOX_MCP_EMAIL_WORKER` | no | `mailbox-mcp-email-worker` | Name of the Email Worker that mailboxes route to. |
-| `MAILBOX_MCP_TRANSPORT` | no | `stdio` | MCP transport. Only `stdio` is supported. |
+| `MAILBOX_MCP_TRANSPORT` | no | `stdio` | MCP transport: `stdio` (default) or `http` (streamable HTTP at `/mcp`). |
+| `MAILBOX_MCP_HTTP_ADDR` | no | `localhost:8080` | Listen address (`host:port`) for the `http` transport; the MCP endpoint is served at `/mcp`. |
 | `MAILBOX_MCP_MESSAGES_API_URL` | yes | — | Base URL of the messages API worker that serves stored mail. |
 | `MAILBOX_MCP_MESSAGES_API_TOKEN` | yes | — | Bearer token of the messages API worker. |
 
@@ -87,6 +88,32 @@ docker run -i --rm \
   mailbox-mcp
 ```
 
+Or serve streamable HTTP from the container. Note the in-container address
+must be `0.0.0.0` for the port mapping to reach it, while the default
+`localhost` bind would not:
+
+```sh
+docker run --rm -p 8080:8080 \
+  -e MAILBOX_MCP_CLOUDFLARE_API_TOKEN=... \
+  -e MAILBOX_MCP_DOMAIN=mail.example.com \
+  -e MAILBOX_MCP_TRANSPORT=http \
+  -e MAILBOX_MCP_HTTP_ADDR=0.0.0.0:8080 \
+  mailbox-mcp
+```
+
+## Transports
+
+The MCP server supports two transports: `stdio` (the default; what locally
+launched clients want) and `http` (streamable HTTP at `/mcp`, for running
+the server once and connecting several clients to it as a remote server).
+The SSE transport is deliberately not supported: it is deprecated in the
+MCP specification.
+
+The MCP server itself has no authentication, so the HTTP transport binds to
+localhost by default. Exposing it to other hosts (via `MAILBOX_MCP_HTTP_ADDR`
+or a port mapping) makes mailbox management and stored mail reachable by
+anyone who can reach the port — do that only on networks you trust.
+
 ## Using from an MCP client
 
 Add the server to your MCP client configuration, for example:
@@ -100,6 +127,18 @@ Add the server to your MCP client configuration, for example:
         "-e", "MAILBOX_MCP_CLOUDFLARE_API_TOKEN",
         "-e", "MAILBOX_MCP_DOMAIN=mail.example.com"],
       "env": { "MAILBOX_MCP_CLOUDFLARE_API_TOKEN": "..." }
+    }
+  }
+}
+```
+
+Or run it once with the HTTP transport and add it as a remote server:
+
+```json
+{
+  "mcpServers": {
+    "mailbox-mcp": {
+      "url": "http://localhost:8080/mcp"
     }
   }
 }
