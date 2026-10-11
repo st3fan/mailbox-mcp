@@ -58,10 +58,9 @@ Remember: mailbox-mcp cannot send email — the address only receives.
 
 1. Use the new address wherever an email address is asked for.
 2. After submitting, wait a moment, then poll list_messages for that address (polling is side-effect free).
-3. When mail arrives, read_message the newest one and extract whatever the purpose needs (link, code, confirmation).
-4. mark_message_read it once acted on.
-5. If the message is no longer needed, archive_message it — prefer archiving over deleting so it stays available for reference. Only delete_message mail you are certain is disposable noise.
-6. Keep the mailbox for now; only delete_mailbox when the address is truly done with and nothing in it is worth keeping.`, purposeOrInferred(purpose))
+3. When mail arrives, read_message the newest one — reading marks it as read automatically — and extract whatever the purpose needs (link, code, confirmation).
+4. If the message is no longer needed, archive_message it — prefer archiving over deleting so it stays available for reference. Only delete_message mail you are certain is disposable noise.
+5. Keep the mailbox for now; only delete_mailbox when the address is truly done with and nothing in it is worth keeping.`, purposeOrInferred(purpose))
 
 	return userPromptResult("Create and use a temporary email address", text), nil
 }
@@ -85,7 +84,7 @@ func verificationCode(ctx context.Context, req *mcp.GetPromptRequest) (*mcp.GetP
 1. Create a fresh address with create_random_mailbox and use it on the site's form.
 2. Poll list_messages for that address a few times over the next minute (listing does not mark anything read).
 3. When the verification email appears, read_message the newest message and extract the verification link or code.
-4. Report the link or code to me, then mark_message_read the message.
+4. Report the link or code to me — reading the message above already marked it as read.
 5. Finish by archiving it with archive_message — archive rather than delete, so the proof of verification stays around in case it is needed again.`, site)
 
 	return userPromptResult("Complete an email verification flow", text), nil

@@ -82,6 +82,11 @@ type messageInput struct {
 	ID string `json:"id" jsonschema:"the message id, from a list_messages result"`
 }
 
+// readMessage returns the message's metadata and raw content and marks the
+// message as read in the same call: reading a message means having seen it,
+// so agents do not need a separate mark step. The returned metadata reflects
+// the post-mark state. If marking fails after a successful read, the error is
+// surfaced; the agent can simply retry.
 func readMessage(client *messages.Client, domain string) mcp.ToolHandlerFor[messageInput, messages.StoredMessage] {
 	return func(ctx context.Context, req *mcp.CallToolRequest, input messageInput) (*mcp.CallToolResult, messages.StoredMessage, error) {
 		address, id, err := validateMessageInput(input, domain)
@@ -92,6 +97,11 @@ func readMessage(client *messages.Client, domain string) mcp.ToolHandlerFor[mess
 		if err != nil {
 			return nil, messages.StoredMessage{}, err
 		}
+		read, err := client.MarkRead(ctx, address, id)
+		if err != nil {
+			return nil, messages.StoredMessage{}, fmt.Errorf("message read, but marking it read failed (retry to mark it): %w", err)
+		}
+		stored.Message = *read
 		return nil, *stored, nil
 	}
 }

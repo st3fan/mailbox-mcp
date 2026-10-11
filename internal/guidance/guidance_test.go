@@ -17,6 +17,8 @@ func TestInstructionsContent(t *testing.T) {
 		"create_random_mailbox",
 		"list_messages",
 		"read_message",
+		"marks the message as read",
+		"mark_message_read",
 		"Prefer archiving over deleting",
 		"archive_message",
 		"delete_message",
@@ -94,7 +96,7 @@ func TestVerificationCodePrompt(t *testing.T) {
 		"create_random_mailbox",
 		"list_messages",
 		"verification link or code",
-		"mark_message_read",
+		"marked it as read",
 		"archive_message",
 		"archive rather than delete",
 	} {

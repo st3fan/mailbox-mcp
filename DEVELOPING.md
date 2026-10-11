@@ -155,5 +155,6 @@ archiving over deleting (see
 it end to end by asking Cline to *"list mailboxes"*, then *"create a random
 mailbox"*, then — after sending an email to the created address — *"list
 messages"* (the message is stored by the Email Worker), *"read the newest
-message"*, *"mark it read"*, *"archive it"* and *"delete it"*. A disabled
+message"* (reading marks it as read automatically), *"archive it"* and
+*"delete it"*. A disabled
 mailbox keeps existing but stops receiving mail; enable it to resume delivery.
