@@ -79,21 +79,43 @@ hand, in the dashboard.
 
 ## Deploying
 
+### One-click install (Deploy to Cloudflare)
+
+Click the button, connect your GitHub account, pick your dedicated email
+domain (`DOMAIN`) and a bearer token (`MCP_AUTH_TOKEN` — generate a random
+string, e.g. `openssl rand -hex 32`): the R2 bucket and D1 registry are
+provisioned automatically, the registry schema is applied by the deploy
+script, and the Worker is deployed. The repo is cloned into your GitHub
+account, so **updates deploy automatically** when you push to your clone.
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/st3fan/mailbox-mcp/tree/main/workers/mcp)
+
+After deploying, two one-time manual steps remain:
+
+1. **Enable Email Routing** on your dedicated domain (dashboard → Email →
+   Email Routing → enable).
+2. **Configure the catch-all rule**: Email Routing → Routing Rules →
+   Catch-all address → Edit → action **Send to a Worker** → select the
+   deployed `mailbox-mcp` Worker.
+
+Then connect your MCP client (see [Using from an MCP client](#using-from-an-mcp-client)).
+
+### CLI install
+
 ```sh
 npx wrangler r2 bucket create mailbox-mcp-mailbox-store   # once
 npx wrangler d1 create mailbox-registry                   # once; paste the ID
-                                                          # into both wrangler.toml files
-npx wrangler d1 migrations apply mailbox-registry         # once, from workers/mcp
+                                                          # into workers/mcp/wrangler.toml
 
 cd workers/mcp
 npm install
 npx wrangler secret put MCP_AUTH_TOKEN
-npm run deploy
+npm run deploy                                            # applies migrations, then deploys
 ```
 
-The Email Worker deploys the same way from `workers/email-worker` (see its
-README), and the catch-all rule is configured once in the dashboard
-(Email Routing → Routing Rules → Catch-all address → **Send to a Worker**).
+The consolidated Worker includes mail ingestion — after deploying, the
+catch-all rule must point at the `mailbox-mcp` Worker (see the one-click
+checklist above).
 
 **Security note:** `/mcp` is protected only by the bearer token. Keep
 `MCP_AUTH_TOKEN` private; anyone holding it can manage mailboxes and read
