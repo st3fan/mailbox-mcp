@@ -10,8 +10,6 @@ const env: Env = {
   MAILBOX_STORE: new FakeR2Bucket() as unknown as R2Bucket,
   REGISTRY: new FakeD1() as unknown as D1Database,
   DOMAIN: "outofscope.party",
-  EMAIL_WORKER: "mailbox-mcp-email-worker",
-  CLOUDFLARE_API_TOKEN: "test-cf-token",
   MCP_AUTH_TOKEN: TOKEN,
 };
 const ctx = { waitUntil: () => {}, passThroughOnException: () => {} } as unknown as ExecutionContext;

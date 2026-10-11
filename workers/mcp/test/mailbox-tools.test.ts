@@ -1,18 +1,20 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import worker from "../src/index";
-import { resetZoneCacheForTests } from "../src/mailbox-tools";
 import type { Env } from "../src/env";
 import { FakeD1 } from "./fake-d1";
 import { FakeR2Bucket } from "./fake-r2";
+
+// create_random_mailbox's retry behavior is tested with a controlled name
+// generator; each test configures the sequence it needs.
+const randomAddress = vi.fn();
+vi.mock("../src/names", () => ({ randomAddress: (domain: string) => randomAddress(domain) }));
 
 const TOKEN = "test-mcp-token";
 const env: Env = {
   MAILBOX_STORE: new FakeR2Bucket() as unknown as R2Bucket,
   REGISTRY: new FakeD1() as unknown as D1Database,
   DOMAIN: "outofscope.party",
-  EMAIL_WORKER: "mailbox-mcp-email-worker",
-  CLOUDFLARE_API_TOKEN: "test-cf-token",
   MCP_AUTH_TOKEN: TOKEN,
 };
 const ctx = { waitUntil: () => {}, passThroughOnException: () => {} } as unknown as ExecutionContext;
@@ -32,175 +34,77 @@ async function callTool(id: number, name: string, args: Record<string, unknown>)
   return { status: res.status, result: data?.result, text: resultText, isError: data?.result?.isError === true };
 }
 
-interface RecordedCall {
-  method: string;
-  url: string;
-  body?: unknown;
-  authorization?: string | null;
-}
-
-/** ApiError marks a mocked API error response. */
-function apiError(code: number, message: string) {
-  return { __apiError: { code, message } };
-}
-
-const isApiError = (v: unknown): v is { __apiError: { code: number; message: string } } =>
-  typeof v === "object" && v !== null && "__apiError" in v;
-
-type MockRoute = { when: (method: string, path: string) => boolean; respond: () => unknown };
-
-/** mockCloudflare replaces global fetch with a router over Cloudflare API
- * paths, recording every call. Routes return the result value, or an
- * apiError() sentinel for error responses. */
-function mockCloudflare(routes: MockRoute[]): { calls: RecordedCall[] } {
-  const calls: RecordedCall[] = [];
-  const mocked = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const req = new Request(input, init);
-    const path = new URL(req.url).pathname + new URL(req.url).search;
-    calls.push({
-      method: req.method,
-      url: path,
-      body: req.body ? JSON.parse(await req.text()) : undefined,
-      authorization: req.headers.get("authorization"),
-    });
-    for (const route of routes) {
-      if (route.when(req.method, path)) {
-        const response = route.respond();
-        if (isApiError(response)) {
-          return new Response(
-            JSON.stringify({ success: false, errors: [response.__apiError] }),
-            { status: 400, headers: { "content-type": "application/json" } },
-          );
-        }
-        return new Response(JSON.stringify({ success: true, errors: [], result: response }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      }
-    }
-    return new Response(
-      JSON.stringify({ success: false, errors: [{ code: 404, message: "route not mocked" }] }),
-      { status: 404, headers: { "content-type": "application/json" } },
-    );
-  });
-  vi.stubGlobal("fetch", mocked);
-  return { calls };
-}
-
-const zoneRoute: MockRoute = {
-  when: (method, path) => method === "GET" && path.startsWith("/client/v4/zones?name="),
-  respond: () => [{ id: "zone-1", name: "outofscope.party" }],
-};
-
-function rulesRoute(when: (method: string, path: string) => boolean, respond: () => unknown): MockRoute {
-  return { when, respond };
+/** registryView returns the raw rows behind the fake D1, for asserting
+ * persistence directly. */
+function registry() {
+  return (env.REGISTRY as unknown as FakeD1).rows;
 }
 
 beforeEach(() => {
-  resetZoneCacheForTests();
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
+  randomAddress.mockReset();
+  (env.REGISTRY as unknown as FakeD1).rows.clear();
 });
 
 describe("create_mailbox", () => {
-  it("creates a rule with the exact address and worker action", async () => {
-    const { calls } = mockCloudflare([
-      zoneRoute,
-      rulesRoute((m, p) => m === "POST" && p === "/client/v4/zones/zone-1/email/routing/rules",
-        () => ({ id: "rule-1", name: "alice@outofscope.party", enabled: true })),
-    ]);
-
+  it("creates a registered, enabled mailbox", async () => {
     const { isError, text } = await callTool(1, "create_mailbox", { address: "alice@outofscope.party" });
     expect(isError).toBe(false);
-    expect(JSON.parse(text)).toEqual({
-      address: "alice@outofscope.party", rule_id: "rule-1", enabled: true,
-    });
-
-    const post = calls.find((c) => c.method === "POST");
-    expect(post?.url).toBe("/client/v4/zones/zone-1/email/routing/rules");
-    expect(post?.authorization).toBe("Bearer test-cf-token");
-    expect(post?.body).toEqual({
-      name: "alice@outofscope.party",
-      enabled: true,
-      matchers: [{ type: "literal", field: "to", value: "alice@outofscope.party" }],
-      actions: [{ type: "worker", value: ["mailbox-mcp-email-worker"] }],
-    });
+    const out = JSON.parse(text);
+    expect(out).toMatchObject({ address: "alice@outofscope.party", enabled: true });
+    expect(out.created_at).toBeTruthy();
+    expect(registry().has("alice@outofscope.party")).toBe(true);
   });
 
-  it("rejects off-domain addresses locally without creating a rule", async () => {
-    const { calls } = mockCloudflare([zoneRoute]);
-    const { isError, text } = await callTool(2, "create_mailbox", { address: "alice@elsewhere.example" });
+  it("errors on duplicate addresses", async () => {
+    await callTool(2, "create_mailbox", { address: "alice@outofscope.party" });
+    const { isError, text } = await callTool(3, "create_mailbox", { address: "alice@outofscope.party" });
+    expect(isError).toBe(true);
+    expect(text).toContain("already exists");
+  });
+
+  it("rejects off-domain addresses locally", async () => {
+    const { isError, text } = await callTool(4, "create_mailbox", { address: "alice@elsewhere.example" });
     expect(isError).toBe(true);
     expect(text).toContain("is not a mailbox on outofscope.party");
-    expect(calls.filter((c) => c.method === "POST")).toHaveLength(0);
+    expect(registry().size).toBe(0);
   });
 });
 
 describe("create_random_mailbox", () => {
-  it("retries with a new name when Cloudflare reports a duplicate", async () => {
-    let posts = 0;
-    mockCloudflare([
-      zoneRoute,
-      rulesRoute((m, p) => m === "POST" && p === "/client/v4/zones/zone-1/email/routing/rules", () => {
-        posts++;
-        if (posts === 1) {
-          return apiError(10004, "routing rule already exists");
-        }
-        return { id: "rule-2", name: "ok", enabled: true };
-      }),
-    ]);
-
-    const { isError, text } = await callTool(3, "create_random_mailbox", {});
+  it("creates a mailbox with a generated name", async () => {
+    randomAddress.mockReturnValue("alpha.bravo@outofscope.party");
+    const { isError, text } = await callTool(5, "create_random_mailbox", {});
     expect(isError).toBe(false);
     const out = JSON.parse(text);
-    expect(out.rule_id).toBe("rule-2");
-    expect(posts).toBe(2);
+    expect(out).toMatchObject({ address: "alpha.bravo@outofscope.party", enabled: true });
+    expect(registry().has("alpha.bravo@outofscope.party")).toBe(true);
   });
 
-  it("gives up after three duplicate attempts", async () => {
-    let posts = 0;
-    mockCloudflare([
-      zoneRoute,
-      rulesRoute((m, p) => m === "POST" && p === "/client/v4/zones/zone-1/email/routing/rules", () => {
-        posts++;
-        return apiError(10004, "routing rule already exists");
-      }),
-    ]);
+  it("retries with a new name when the generated address already exists", async () => {
+    (env.REGISTRY as unknown as FakeD1).rows.set("taken@outofscope.party", { enabled: 1, created_at: "x" });
+    randomAddress.mockReturnValueOnce("taken@outofscope.party").mockReturnValueOnce("fresh@outofscope.party");
 
-    const { isError, text } = await callTool(4, "create_random_mailbox", {});
+    const { isError, text } = await callTool(6, "create_random_mailbox", {});
+    expect(isError).toBe(false);
+    expect(JSON.parse(text).address).toBe("fresh@outofscope.party");
+  });
+
+  it("gives up after three conflicts", async () => {
+    (env.REGISTRY as unknown as FakeD1).rows.set("taken@outofscope.party", { enabled: 1, created_at: "x" });
+    randomAddress.mockReturnValue("taken@outofscope.party");
+
+    const { isError, text } = await callTool(7, "create_random_mailbox", {});
     expect(isError).toBe(true);
     expect(text).toContain("no unique random mailbox after 3 attempts");
-    expect(posts).toBe(3);
   });
 });
 
 describe("list_mailboxes", () => {
-  it("lists only mailbox rules routed to the email worker, sorted", async () => {
-    mockCloudflare([
-      zoneRoute,
-      rulesRoute((m, p) => m === "GET" && p === "/client/v4/zones/zone-1/email/routing/rules", () => [
-        {
-          id: "r2", name: "zeta@outofscope.party", enabled: true,
-          matchers: [{ type: "literal", field: "to", value: "zeta@outofscope.party" }],
-          actions: [{ type: "worker", value: ["mailbox-mcp-email-worker"] }],
-        },
-        {
-          id: "r1", name: "alpha@outofscope.party", enabled: true,
-          matchers: [{ type: "literal", field: "to", value: "alpha@outofscope.party" }],
-          actions: [{ type: "worker", value: ["mailbox-mcp-email-worker"] }],
-        },
-        {
-          // A forwarding rule is not a mailbox and must not be listed.
-          id: "rx", name: "forward", enabled: true,
-          matchers: [{ type: "literal", field: "to", value: "other@outofscope.party" }],
-          actions: [{ type: "forward", value: ["someone@example.com"] }],
-        },
-      ]),
-    ]);
+  it("lists registry entries sorted by address", async () => {
+    await callTool(8, "create_mailbox", { address: "zeta@outofscope.party" });
+    await callTool(9, "create_mailbox", { address: "alpha@outofscope.party" });
 
-    const { isError, text } = await callTool(5, "list_mailboxes", {});
+    const { isError, text } = await callTool(10, "list_mailboxes", {});
     expect(isError).toBe(false);
     const out = JSON.parse(text);
     expect(out.mailboxes.map((m: { address: string }) => m.address))
@@ -209,71 +113,37 @@ describe("list_mailboxes", () => {
 });
 
 describe("delete_mailbox", () => {
-  const existingRule = {
-    id: "r1", name: "alpha@outofscope.party", enabled: true,
-    matchers: [{ type: "literal", field: "to", value: "alpha@outofscope.party" }],
-    actions: [{ type: "worker", value: ["mailbox-mcp-email-worker"] }],
-  };
+  it("removes the registry entry", async () => {
+    await callTool(11, "create_mailbox", { address: "alpha@outofscope.party" });
 
-  it("deletes the mailbox's rule", async () => {
-    const { calls } = mockCloudflare([
-      zoneRoute,
-      rulesRoute((m, p) => m === "GET" && p === "/client/v4/zones/zone-1/email/routing/rules", () => [existingRule]),
-      rulesRoute((m, p) => m === "DELETE" && p === "/client/v4/zones/zone-1/email/routing/rules/r1", () => ({})),
-    ]);
-
-    const { isError, text } = await callTool(6, "delete_mailbox", { address: "alpha@outofscope.party" });
+    const { isError, text } = await callTool(12, "delete_mailbox", { address: "alpha@outofscope.party" });
     expect(isError).toBe(false);
-    expect(JSON.parse(text)).toEqual({ address: "alpha@outofscope.party", rule_id: "r1", deleted: true });
-    expect(calls.find((c) => c.method === "DELETE")?.url).toBe("/client/v4/zones/zone-1/email/routing/rules/r1");
+    expect(JSON.parse(text)).toEqual({ address: "alpha@outofscope.party", deleted: true });
+    expect(registry().has("alpha@outofscope.party")).toBe(false);
   });
 
-  it("404s mailboxes that do not exist", async () => {
-    mockCloudflare([
-      zoneRoute,
-      rulesRoute((m, p) => m === "GET" && p === "/client/v4/zones/zone-1/email/routing/rules", () => []),
-    ]);
-
-    const { isError, text } = await callTool(7, "delete_mailbox", { address: "gone@outofscope.party" });
+  it("404s unknown mailboxes", async () => {
+    const { isError, text } = await callTool(13, "delete_mailbox", { address: "gone@outofscope.party" });
     expect(isError).toBe(true);
     expect(text).toContain('mailbox "gone@outofscope.party" not found');
   });
 });
 
 describe("enable_mailbox and disable_mailbox", () => {
-  const existingRule = {
-    id: "r1", name: "alpha@outofscope.party", enabled: true,
-    matchers: [{ type: "literal", field: "to", value: "alpha@outofscope.party" }],
-    actions: [{ type: "worker", value: ["mailbox-mcp-email-worker"] }],
-  };
+  it("flip the enabled flag", async () => {
+    await callTool(14, "create_mailbox", { address: "alpha@outofscope.party" });
 
-  it("writes the full rule back with only the enabled flag changed", async () => {
-    const { calls } = mockCloudflare([
-      zoneRoute,
-      rulesRoute((m, p) => m === "GET" && p === "/client/v4/zones/zone-1/email/routing/rules", () => [existingRule]),
-      rulesRoute((m, p) => m === "GET" && p === "/client/v4/zones/zone-1/email/routing/rules/r1", () => existingRule),
-      rulesRoute((m, p) => m === "PUT" && p === "/client/v4/zones/zone-1/email/routing/rules/r1", () => existingRule),
-    ]);
-
-    const disable = await callTool(8, "disable_mailbox", { address: "alpha@outofscope.party" });
+    const disable = await callTool(15, "disable_mailbox", { address: "alpha@outofscope.party" });
     expect(disable.isError).toBe(false);
-    expect(JSON.parse(disable.text)).toEqual({ address: "alpha@outofscope.party", rule_id: "r1", enabled: false });
+    expect(JSON.parse(disable.text)).toMatchObject({ address: "alpha@outofscope.party", enabled: false });
 
-    const put = calls.find((c) => c.method === "PUT");
-    expect(put?.body).toEqual({ ...existingRule, enabled: false });
-
-    const enable = await callTool(9, "enable_mailbox", { address: "alpha@outofscope.party" });
+    const enable = await callTool(16, "enable_mailbox", { address: "alpha@outofscope.party" });
     expect(enable.isError).toBe(false);
     expect(JSON.parse(enable.text).enabled).toBe(true);
   });
 
   it("404 unknown mailboxes", async () => {
-    mockCloudflare([
-      zoneRoute,
-      rulesRoute((m, p) => m === "GET" && p === "/client/v4/zones/zone-1/email/routing/rules", () => []),
-    ]);
-
-    const disable = await callTool(10, "disable_mailbox", { address: "gone@outofscope.party" });
+    const disable = await callTool(17, "disable_mailbox", { address: "gone@outofscope.party" });
     expect(disable.isError).toBe(true);
     expect(disable.text).toContain("not found");
   });

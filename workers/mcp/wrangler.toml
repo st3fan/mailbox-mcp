@@ -15,7 +15,6 @@ compatibility_date = "2025-10-01"
 
 [vars]
 DOMAIN = "outofscope.party"
-EMAIL_WORKER = "mailbox-mcp-email-worker"
 
 [[r2_buckets]]
 binding = "MAILBOX_STORE"

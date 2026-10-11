@@ -10,14 +10,6 @@ export interface Env {
   /** The single email domain mailboxes are managed on (wrangler var). */
   DOMAIN: string;
 
-  /** Name of the Email Worker that mailbox routing rules point to (wrangler var).
-   * Used by the Email-Routing-based mailbox tools until they move to the registry. */
-  EMAIL_WORKER: string;
-
-  /** Cloudflare API token with Email Routing Rules edit permission for DOMAIN (secret).
-   * Used by the Email-Routing-based mailbox tools until they move to the registry. */
-  CLOUDFLARE_API_TOKEN: string;
-
   /** Bearer token MCP clients must present (secret). */
   MCP_AUTH_TOKEN: string;
 }
