@@ -37,64 +37,53 @@ working conventions.
    `wrangler dev` for local development.
 
 2. **Domain on Cloudflare.** The (dedicated) email domain must be a zone in
-   your Cloudflare account, and set as `MAILBOX_MCP_DOMAIN` in
+   your Cloudflare account. Set it as `MAILBOX_MCP_DOMAIN` in the
+   gitignored root `.env` file (recommended — wrangler picks it up at
+   deploy time and it overrides `wrangler.toml`) or directly in
    `workers/mcp/wrangler.toml`.
 3. **Enable Email Routing.** Dashboard → your domain → **Email → Email
    Routing** → enable. Cloudflare adds the required MX and SPF records.
 
 ## 2. Deploy
 
-1. **Storage and registry.** Create the R2 bucket and the D1 registry, and
-   apply the schema migration:
+One command deploys everything:
 
-   ```sh
-   npx wrangler r2 bucket create mailbox-mcp-store
-   npx wrangler d1 create mailbox-mcp-registry
-   ```
+```sh
+cd workers/mcp && npm install
+npm run deploy
+```
 
-   Paste the database ID into `workers/mcp/wrangler.toml`, then:
+The deploy script:
 
-   ```sh
-   cd workers/mcp && npm install
-   npx wrangler d1 migrations apply MAILBOX_MCP_REGISTRY --remote
-   ```
+1. **Deploys the Worker.** Wrangler provisions the R2 bucket
+   (`mailbox-mcp-store`) and the D1 registry (`mailbox-mcp-registry`)
+   automatically if they don't exist, and inherits the existing bindings on
+   subsequent deploys — nothing to create or paste by hand.
+2. **Applies the registry migrations** (`d1 migrations apply
+   MAILBOX_MCP_REGISTRY --remote`), after the deploy so the binding is
+   resolved. The brief pre-migration window is safe: the email handler
+   defers (retries) on registry lookup failure rather than bouncing mail.
+3. **Provisions the bearer token** (first deploy only): if
+   `MAILBOX_MCP_BEARER_TOKEN` is not set, a random token is generated, set
+   as the secret, and printed once — save it, it is not shown again
+   (skipped in CI; there it must be provided by the CI environment).
 
-2. **Deploy** the Worker and set its one secret:
-
-   ```sh
-   npx wrangler secret put MAILBOX_MCP_BEARER_TOKEN    # generate e.g. with: openssl rand -hex 32
-   npm run deploy                            # applies pending migrations, then deploys
-   ```
-
-   The Worker then serves MCP as streamable HTTP at
-   `https://mailbox-mcp.<account>.workers.dev/mcp`. The endpoint is
-   protected by the bearer token only — keep `MAILBOX_MCP_BEARER_TOKEN` private.
+The Worker then serves MCP as streamable HTTP at
+`https://mailbox-mcp.<account>.workers.dev/mcp`. The endpoint is
+protected by the bearer token only — keep `MAILBOX_MCP_BEARER_TOKEN` private.
 
 ## 3. Catch-all routing rule
 
 In the dashboard: **Email Routing → Routing Rules → Catch-all address →
 Edit** → action **Send to a Worker** → select `mailbox-mcp`.
 
-Prefer the CLI? Do it with the Email Routing API instead (an API token with
-**Zone → Email Routing Rules → Edit** permission required):
+This is the one manual step, and deliberately so: Email Routing is zone
+configuration, which a Worker deploy cannot provision, and doing it by
+hand avoids needing an API token with Email Routing permissions.
 
-```sh
-# 1. Get your zone ID for the domain
-curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-  "https://api.cloudflare.com/client/v4/zones?name=$MAILBOX_MCP_DOMAIN"
-# → .result[0].id
-
-# 2. Point the catch-all rule at the Worker and enable it
-curl -s -X PUT -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-  -H "Content-Type: application/json" \
-  "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/email/routing/rules/catch_all" \
-  --data '{"matchers":[{"type":"all"}],"actions":[{"type":"worker","value":["mailbox-mcp"]}],"name":"Catch-all to mailbox-mcp","enabled":true}'
-```
-
-This is a one-time, manual step. The catch-all routes mail for *every*
-address on the domain to the Worker; the Worker accepts only addresses
-registered in the mailbox registry and bounces everything else with
-"Address not found".
+The catch-all routes mail for *every* address on the domain to the Worker;
+the Worker accepts only addresses registered in the mailbox registry and
+bounces everything else with "Address not found".
 
 ## 4. Use it from an MCP client
 

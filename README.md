@@ -67,27 +67,27 @@ two of them need your attention — the rest have sensible defaults:
 
 | Binding | Kind | Required | Meaning |
 |---|---|---|---|
-| `MAILBOX_MCP_DOMAIN` | var | **Yes** | The single (dedicated) email domain to manage, e.g. `example.com`. |
-| `MAILBOX_MCP_BEARER_TOKEN` | secret | **Yes** | Bearer token MCP clients must present at `/mcp`. Generate a random string, e.g. `openssl rand -hex 32`. |
-| `MAILBOX_MCP_STORE` | R2 binding | No | The bucket received mail is stored in. Has a default: it is provisioned automatically as `mailbox-mcp-store` (the button creates it; CLI: `wrangler r2 bucket create mailbox-mcp-store`). Only change this if you want a custom bucket name. |
-| `MAILBOX_MCP_REGISTRY` | D1 binding | No | The mailbox registry. Has a default: it is provisioned automatically as `mailbox-mcp-registry`, with the schema applied by the deploy script. Only change this if you want a custom database name. |
+| `MAILBOX_MCP_DOMAIN` | var | **Yes** | The single (dedicated) email domain to manage, e.g. `example.com`. Set it in the gitignored root `.env` (wrangler picks it up at deploy, CLI path) or in `wrangler.toml`. |
+| `MAILBOX_MCP_BEARER_TOKEN` | secret | **Yes** | Bearer token MCP clients must present at `/mcp`. Generated automatically on first CLI deploy; the button flow prompts for it. |
+| `MAILBOX_MCP_STORE` | R2 binding | No | The bucket received mail is stored in. Has a default: provisioned automatically as `mailbox-mcp-store`. Only change this if you want a custom bucket name. |
+| `MAILBOX_MCP_REGISTRY` | D1 binding | No | The mailbox registry. Has a default: provisioned automatically as `mailbox-mcp-registry`, with the schema applied by the deploy script. Only change this if you want a custom database name. |
 
-**No Cloudflare API token is needed**: mailboxes are
+**No Cloudflare API token is needed anywhere**: mailboxes are
 registry entries, and the catch-all routing rule is configured once in the
-dashboard. (The optional CLI route for that one rule is the exception — it
-needs a token with Email Routing Rules edit permission; see
-[Install → CLI](#cli-install).)
+dashboard (Email Routing is zone configuration, outside what a Worker
+deploy can provision).
 
 ## Install
 
 ### One-click install (Deploy to Cloudflare)
 
 Click the button, connect your GitHub account, pick your dedicated email
-domain (`MAILBOX_MCP_DOMAIN`) and a bearer token (`MAILBOX_MCP_BEARER_TOKEN` — generate a random
-string, e.g. `openssl rand -hex 32`): the R2 bucket and D1 registry are
-provisioned automatically, the registry schema is applied by the deploy
-script, and the Worker is deployed. The repo is cloned into your GitHub
-account, so **updates deploy automatically** when you push to your clone.
+domain (`MAILBOX_MCP_DOMAIN`) and a bearer token (`MAILBOX_MCP_BEARER_TOKEN`
+— generate a random string, e.g. `openssl rand -hex 32`): the R2 bucket and
+D1 registry are provisioned automatically, the registry schema is applied
+by the deploy script, and the Worker is deployed. The repo is cloned into
+your GitHub account, so **updates deploy automatically** when you push to
+your clone.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/st3fan/mailbox-mcp/tree/main/workers/mcp)
 
@@ -103,38 +103,35 @@ Then connect your MCP client (see [Using from an MCP client](#using-from-an-mcp-
 
 ### CLI install
 
+From the repository root:
+
 ```sh
-npx wrangler r2 bucket create mailbox-mcp-store   # once
-npx wrangler d1 create mailbox-mcp-registry                   # once; paste the ID
-                                                          # into workers/mcp/wrangler.toml
+echo 'MAILBOX_MCP_DOMAIN=your-domain.example' >> .env   # your dedicated email domain;
+                                                        # .env is gitignored, and wrangler
+                                                        # picks it up at deploy time
 
 cd workers/mcp
 npm install
-npx wrangler secret put MAILBOX_MCP_BEARER_TOKEN
-npm run deploy                                            # applies migrations, then deploys
+npm run deploy
 ```
 
-The consolidated Worker includes mail ingestion — after deploying, the
-catch-all rule must point at the `mailbox-mcp` Worker. Configure it in the
-dashboard (**Email Routing → Routing Rules → Catch-all address → Edit →
-Send to a Worker**), or from the CLI:
+That single deploy command does everything: the R2 bucket and D1 registry
+are **provisioned automatically** if missing (or adopted if they exist),
+the registry migrations are applied, and — on first deploy — a **bearer
+token is generated**, set as the `MAILBOX_MCP_BEARER_TOKEN` secret, and
+printed once. Save that token: it is not shown again.
 
-```sh
-# 1. Get your zone ID for the domain
-curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-  "https://api.cloudflare.com/client/v4/zones?name=$MAILBOX_MCP_DOMAIN"
-# → .result[0].id
+One manual step remains, in the dashboard (Email Routing is zone
+configuration, which deploys cannot touch):
 
-# 2. Point the catch-all rule at the Worker and enable it
-curl -s -X PUT -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-  -H "Content-Type: application/json" \
-  "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/email/routing/rules/catch_all" \
-  --data '{"matchers":[{"type":"all"}],"actions":[{"type":"worker","value":["mailbox-mcp"]}],"name":"Catch-all to mailbox-mcp","enabled":true}'
-```
+1. **Enable Email Routing** on your dedicated domain (Email → Email
+   Routing → enable).
+2. **Configure the catch-all rule**: Email Routing → Routing Rules →
+   Catch-all address → Edit → action **Send to a Worker** → select
+   `mailbox-mcp`.
 
-The API token needs **Zone → Email Routing Rules → Edit** permission (this
-is the only step in a CLI install that touches anything outside Workers).
-Without a token, use the dashboard — same one-time step.
+Then connect your MCP client with the Worker's `/mcp` URL and the printed
+token (see [Using from an MCP client](#using-from-an-mcp-client)).
 
 **Security note:** `/mcp` is protected only by the bearer token. Keep
 `MAILBOX_MCP_BEARER_TOKEN` private; anyone holding it can manage mailboxes and read
