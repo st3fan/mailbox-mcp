@@ -26,6 +26,16 @@ working conventions.
    wrangler.toml). Prefer not to install globally? Run commands as
    `npx wrangler ...` instead.
 
+   **About npm's install-scripts approval prompt.** On install, npm lists
+   two packages whose install scripts are not approved: `workerd`
+   (downloads Cloudflare's local runtime for `wrangler dev`) and `esbuild`
+   (downloads its binary; usually already present via a platform package).
+   **This project does not need them**: `npm test`, `npm run typecheck`,
+   and `npm run deploy` all work without running those scripts (verified).
+   Leaving them unapproved is the minimal-supply-chain choice; only approve
+   them (`npm approve-scripts esbuild workerd`) if you plan to use
+   `wrangler dev` for local development.
+
 2. **Domain on Cloudflare.** The (dedicated) email domain must be a zone in
    your Cloudflare account, and set as `MAILBOX_MCP_DOMAIN` in
    `workers/mcp/wrangler.toml`.
