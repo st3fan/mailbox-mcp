@@ -1,9 +1,11 @@
 // An in-memory D1 binding stub covering exactly the mailbox-registry SQL the
 // registry module issues: INSERT, SELECT (one/all), UPDATE, DELETE — with a
-// PRIMARY KEY conflict throwing like real SQLite does.
+// PRIMARY KEY conflict throwing like real SQLite does. A lookupFails flag
+// simulates registry outages (used by the email handler's deferral test).
 export class FakeD1 {
   rows = new Map<string, { enabled: number; created_at: string }>();
   statements: string[] = [];
+  lookupFails = false;
 
   prepare(sql: string) {
     // Both direct calls (no params) and .bind(...) chains are supported, so
@@ -22,6 +24,9 @@ export class FakeD1 {
     const self = this;
     return {
       async first<T>(): Promise<T | null> {
+        if (self.lookupFails) {
+          throw new Error("registry unavailable");
+        }
         if (sql.includes("FROM mailboxes WHERE address = ?")) {
           const row = self.rows.get(params[0] as string);
           return (row ? { address: params[0], ...row } : null) as T | null;

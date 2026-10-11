@@ -1,17 +1,16 @@
 # mailbox-mcp MCP worker
 
-Serves the mailbox-mcp MCP endpoint as streamable HTTP at `/mcp` (bearer
-token auth), owns the **mailbox registry** (a D1 database shared with the
-[email worker](../email-worker)) and the message storage in the
-`MAILBOX_STORE` R2 binding. Mailboxes are registry entries, not Email
-Routing rules: a single catch-all rule routes the domain's mail to the email
-worker, which accepts registered, enabled addresses.
+The single mailbox-mcp Worker: it serves the MCP endpoint as streamable HTTP
+at `/mcp` (bearer token auth) **and** ingests mail — the `email()` handler
+accepts registered, enabled mailboxes routed by the catch-all Email Routing
+rule and stores them in R2. It owns the **mailbox registry** (a D1 database)
+and the `MAILBOX_STORE` R2 binding for message storage.
 
 ## Configuration
 
 wrangler vars: `DOMAIN`. Secrets: `MCP_AUTH_TOKEN` (bearer token clients
 must present). Bindings: `MAILBOX_STORE` (R2) and `REGISTRY` (D1). Create
-the D1 database once and paste its ID into both workers' wrangler.toml:
+the D1 database once and apply the schema:
 
 ```sh
 npx wrangler d1 create mailbox-registry
@@ -23,13 +22,17 @@ Deployment steps are in the repository root
 
 ## Layout
 
-- `src/index.ts` — the Worker `fetch` handler: bearer auth, `/mcp` routing.
+- `src/index.ts` — the Worker handlers: `fetch` (bearer auth, `/mcp`
+  routing) and `email` (acceptance check + mail storage).
 - `src/server.ts` — the MCP server: instructions, prompts, tool registration.
 - `src/message-tools.ts` — the five message tools (direct R2 access).
 - `src/mailbox-tools.ts` — the six mailbox tools (registry CRUD).
-- `src/registry.ts` — the mailbox registry operations (D1).
+- `src/registry.ts` — the mailbox registry operations (D1), including
+  `deleteAllMessages` (used by delete_mailbox) and the read-side lookup used
+  by the email handler.
 - `src/storage.ts` — R2 message storage (list/read/patch/delete).
 - `src/guidance.ts` — instructions and prompt texts.
+- `src/keys.ts`, `src/metadata.ts` — mail storage key building and metadata.
 
 ## Development
 
