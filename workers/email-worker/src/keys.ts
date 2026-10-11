@@ -2,13 +2,15 @@
 //
 // Layout in the bucket:
 //
-//   <mailbox>/<receivedAtMillis>-<messageId>.eml    raw message
-//   <mailbox>/<receivedAtMillis>-<messageId>.json   metadata
+//   <mailbox>/<sortKey>-<messageId>.eml     raw message
+//   <mailbox>/<sortKey>-<messageId>.json    metadata
 //
-// The stem `<receivedAtMillis>-<messageId>` is the message id used by the
-// messages API: sorting keys with a plain string sort sorts a mailbox's
-// messages oldest first, newest last, and the messages API lists the metadata
-// objects (".json") newest first by reversing that order.
+// The stem `<sortKey>-<messageId>` is the message id used by the messages API.
+// `<sortKey>` is the receive time inverted against a fixed maximum
+// (9999999999999 - receivedAtMillis, zero-padded to 13 digits), so sorting keys
+// with a plain string sort sorts a mailbox's messages NEWEST FIRST. That lets
+// the messages API list forward with R2's ascending prefix listing and page
+// correctly. The real receive time stays visible in metadata.receivedAt.
 
 /** Characters that are unsafe or awkward in an R2 key; everything else is
  * replaced with "-" when building the id part of a key. The id is a single
@@ -16,6 +18,15 @@
  * "@" stays, so ids keep the shape of real Message-IDs and remain valid in
  * API URL paths. */
 const KEY_UNSAFE = /[^A-Za-z0-9._@-]/g;
+
+/** Fixed maximum epoch millis the sort key inverts against. Covers 13-digit
+ * timestamps (until year 2286); after that the ordering degrades gracefully. */
+const MAX_MILLIS = 9999999999999;
+
+/** Encodes receive time so ascending string order equals newest first. */
+export function sortKeyFor(receivedAtMillis: number): string {
+  return String(MAX_MILLIS - receivedAtMillis).padStart(13, "0");
+}
 
 /** Removes the angle brackets of a Message-ID header value ("<...>") and any
  * surrounding whitespace. Returns null for empty input. */
@@ -39,8 +50,8 @@ export function keyIdFromMessageId(value: string | null | undefined): string | n
 }
 
 export interface MessageKey {
-  /** The message id used in API paths: `<receivedAtMillis>-<slug>` or
-   * `<receivedAtMillis>-<random>` when the message has no usable Message-ID. */
+  /** The message id used in API paths: `<sortKey>-<slug>` or
+   * `<sortKey>-<random>` when the message has no usable Message-ID. */
   id: string;
   /** Key of the raw message object. */
   raw: string;
@@ -57,7 +68,7 @@ export function buildMessageKeys(
   messageId: string | null | undefined,
 ): MessageKey {
   const slug = keyIdFromMessageId(messageId) ?? randomSlug();
-  const id = `${receivedAtMillis}-${slug}`;
+  const id = `${sortKeyFor(receivedAtMillis)}-${slug}`;
   return {
     id,
     raw: `${mailbox}/${id}.eml`,

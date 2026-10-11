@@ -39,19 +39,27 @@ describe("keyIdFromMessageId", () => {
 });
 
 describe("buildMessageKeys", () => {
-  it("builds raw and metadata keys under the mailbox prefix", () => {
+  it("builds raw and metadata keys under the mailbox prefix, newest-first sort key", () => {
     const keys = buildMessageKeys("alice@outofscope.party", 1729, "<m1@example.com>");
-    expect(keys.id).toBe("1729-m1@example.com");
-    expect(keys.raw).toBe("alice@outofscope.party/1729-m1@example.com.eml");
-    expect(keys.metadata).toBe("alice@outofscope.party/1729-m1@example.com.json");
+    // 9999999999999 - 1729 = 9999999998270
+    expect(keys.id).toBe("9999999998270-m1@example.com");
+    expect(keys.raw).toBe("alice@outofscope.party/9999999998270-m1@example.com.eml");
+    expect(keys.metadata).toBe("alice@outofscope.party/9999999998270-m1@example.com.json");
+  });
+
+  it("sorts newer messages before older ones", () => {
+    const newer = buildMessageKeys("alice@outofscope.party", 2000, "<n@example.com>");
+    const older = buildMessageKeys("alice@outofscope.party", 1000, "<o@example.com>");
+    expect(newer.raw < older.raw).toBe(true);
   });
 
   it("generates a random slug when the Message-ID is unusable, and never collides", () => {
     const a = buildMessageKeys("alice@outofscope.party", 1729, null);
     const b = buildMessageKeys("alice@outofscope.party", 1729, null);
-    expect(a.id).toMatch(/^1729-[0-9a-f]{16}$/);
-    expect(b.id).toMatch(/^1729-[0-9a-f]{16}$/);
+    expect(a.id).toMatch(/^\d{13}-[0-9a-f]{16}$/);
+    expect(b.id).toMatch(/^\d{13}-[0-9a-f]{16}$/);
     expect(a.id).not.toBe(b.id);
-    expect(a.metadata).toBe("alice@outofscope.party/1729-" + a.id.slice(5) + ".json");
+    expect(a.metadata).toBe(`alice@outofscope.party/${a.id}.json`);
+    expect(a.raw).toBe(`alice@outofscope.party/${a.id}.eml`);
   });
 });

@@ -50,8 +50,8 @@ describe("email handler", () => {
     const bucket = env.MAILBOX_STORE as unknown as FakeR2Bucket;
     const keys = [...bucket.objects.keys()].sort();
     expect(keys).toHaveLength(2);
-    expect(keys[0]).toMatch(/^alice@outofscope\.party\/\d+-m1@example\.com\.eml$/);
-    expect(keys[1]).toMatch(/^alice@outofscope\.party\/\d+-m1@example\.com\.json$/);
+    expect(keys[0]).toMatch(/^alice@outofscope\.party\/\d{13}-m1@example\.com\.eml$/);
+    expect(keys[1]).toMatch(/^alice@outofscope\.party\/\d{13}-m1@example\.com\.json$/);
 
     const storedRaw = await bucket.get(keys[0]);
     expect(new TextDecoder().decode(storedRaw!.body)).toBe("raw message body");

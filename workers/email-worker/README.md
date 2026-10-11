@@ -14,16 +14,19 @@ Each received message is stored in the `MAILBOX_STORE` R2 bucket under the
 recipient mailbox's prefix:
 
 ```
-<mailbox>/<receivedAtMillis>-<messageId>.eml     raw message
-<mailbox>/<receivedAtMillis>-<messageId>.json    metadata
+<mailbox>/<sortKey>-<messageId>.eml     raw message
+<mailbox>/<sortKey>-<messageId>.json    metadata
 ```
 
 - `<mailbox>` is the envelope recipient address, lowercased.
-- `<receivedAtMillis>-<messageId>` is the **message id** the messages API uses
-  in its paths: the receive time in epoch milliseconds, then the Message-ID
-  header with unsafe characters replaced by `-` (angle brackets stripped), or a
-  random 16-hex-digit slug when there is no usable Message-ID.
-- Sorting keys as strings sorts a mailbox's messages oldest first.
+- `<sortKey>-<messageId>` is the **message id** the messages API uses in its
+  paths. `<sortKey>` is the receive time inverted against a fixed maximum
+  (`9999999999999 - receivedAtMillis`, zero-padded to 13 digits), so plain
+  string order is **newest first** — the messages API lists forward and pages
+  correctly. `<messageId>` is the Message-ID header with unsafe characters
+  replaced by `-` (angle brackets stripped), or a random 16-hex-digit slug
+  when there is no usable Message-ID. The real receive time is in
+  `metadata.receivedAt`.
 - The metadata object is written last, so a metadata key always implies its
   raw message exists.
 
@@ -31,7 +34,7 @@ Metadata JSON shape (this is what the messages API serves for listings):
 
 ```json
 {
-  "id": "1760000000000-abc@example.com",
+  "id": "8239999999999-abc@example.com",
   "mailbox": "alice@outofscope.party",
   "from": "sender@example.com",
   "to": "alice@outofscope.party",
