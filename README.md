@@ -1,14 +1,28 @@
 # mailbox-mcp
 
-mailbox-mcp is an MCP server that sits on top of Cloudflare's Email Routing
-functionality. With a domain that is onboarded to that service, it can create,
-list, and delete **mailboxes** — an MCP term here meaning an email address whose
-mail is routed by an Email Routing rule to the `mailbox-mcp-email-worker` Email
-Worker, which stores the email in R2.
+mailbox-mcp is an MCP server for **temporary email addresses that actually
+receive mail**, running entirely on Cloudflare. With a domain onboarded to
+Cloudflare Email Routing, it creates and manages mailboxes — addresses whose
+mail is routed by an Email Routing rule to an Email Worker and stored in R2 —
+and lets agents read and manage the mail they receive.
 
-The project is about **creating temporary email addresses, receiving email, and
-managing the mailbox**. It deliberately has no functionality to send email. See
-[PRODUCT.md](PRODUCT.md) for the full product scope.
+The project is about **creating temporary email addresses, receiving email,
+and managing the mailbox**. It deliberately has no functionality to send
+email.
+
+## Architecture
+
+Everything runs on Cloudflare as two Workers with different responsibilities:
+
+1. **`workers/email-worker`** (`mailbox-mcp-email-worker`) — receives mail
+   routed by Email Routing rules and stores it in R2.
+2. **`workers/mcp`** (`mailbox-mcp`) — serves the MCP endpoint as streamable
+   HTTP at `/mcp` (bearer-token auth), owns message storage (direct R2
+   access), and manages mailboxes by talking to Cloudflare's Email Routing
+   API with a scoped token.
+
+Agents connect to `https://mailbox-mcp.<account>.workers.dev/mcp` as a
+remote MCP server.
 
 ## Tools
 
@@ -17,18 +31,18 @@ managing the mailbox**. It deliberately has no functionality to send email. See
 | `create_mailbox` | Create a mailbox: an Email Routing rule routing the address to the Email Worker. |
 | `create_random_mailbox` | Create a mailbox with a generated address like `john.smith@domain`. |
 | `list_mailboxes` | List mailboxes managed by mailbox-mcp on the configured domain. |
-| `delete_mailbox` | Delete a mailbox by address. |
+| `delete_mailbox` | Delete a mailbox by address. Permanent. |
 | `enable_mailbox` | Re-activate a mailbox: mail to the address is routed again. |
 | `disable_mailbox` | De-activate a mailbox: it keeps existing but mail is no longer routed. |
-| `list_messages` | List a mailbox's messages, newest first, paginated. |
+| `list_messages` | List a mailbox's messages, newest first, paginated. Never marks messages read. |
 | `read_message` | Read one message: metadata and raw content. Marks the message as read automatically. |
 | `mark_message_read` | Mark a message as read without re-reading it. |
-| `archive_message` | Archive a message. |
-| `delete_message` | Delete a message. |
+| `archive_message` | Archive a message: keeps it for reference, out of the way. |
+| `delete_message` | Delete a message. Permanent. |
 
-Addresses outside the configured domain are rejected locally, before any API
-call. Other routing rules that may exist on the domain (forwarding rules,
-catch-alls) are never listed or deleted.
+Addresses outside the configured domain are rejected locally, before any
+storage or API access. Other routing rules that may exist on the domain
+(forwarding rules, catch-alls) are never listed or deleted.
 
 ## Agent guidance
 
@@ -43,102 +57,44 @@ that walk an agent through those flows. The wording is reviewed in
 
 ## Configuration
 
-The server is configured through environment variables and fails fast at
-startup if anything is missing or invalid. Variables that are not set in the
-environment are filled from a `.env` file in the working directory, if present:
-`KEY=VALUE` lines, `#` comments and blank lines ignored, optional surrounding
-quotes on values. The environment always wins over `.env`, and a missing
-`.env` is not an error.
+The MCP worker is configured with wrangler vars and secrets:
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `MAILBOX_MCP_CLOUDFLARE_API_TOKEN` | yes | — | Cloudflare API token with **Zone → Email Routing Rules → Edit** permission for the domain's zone. |
-| `MAILBOX_MCP_DOMAIN` | yes | — | The single email domain to manage, e.g. `mail.example.com`. |
-| `MAILBOX_MCP_EMAIL_WORKER` | no | `mailbox-mcp-email-worker` | Name of the Email Worker that mailboxes route to. |
-| `MAILBOX_MCP_TRANSPORT` | no | `stdio` | MCP transport: `stdio` (default) or `http` (streamable HTTP at `/mcp`). |
-| `MAILBOX_MCP_HTTP_ADDR` | no | `localhost:8080` | Listen address (`host:port`) for the `http` transport; the MCP endpoint is served at `/mcp`. |
-| `MAILBOX_MCP_MESSAGES_API_URL` | yes | — | Base URL of the messages API worker that serves stored mail. |
-| `MAILBOX_MCP_MESSAGES_API_TOKEN` | yes | — | Bearer token of the messages API worker. |
+| Binding | Kind | Meaning |
+|---|---|---|
+| `DOMAIN` | var | The single email domain to manage, e.g. `outofscope.party`. |
+| `EMAIL_WORKER` | var | Name of the Email Worker mailboxes route to. |
+| `MAILBOX_STORE` | R2 binding | The bucket the email worker stores mail in. |
+| `CLOUDFLARE_API_TOKEN` | secret | API token with **Zone → Email Routing Rules → Edit** permission for the domain's zone. |
+| `MCP_AUTH_TOKEN` | secret | Bearer token MCP clients must present at `/mcp`. |
 
-Create a scoped API token in the Cloudflare dashboard: **My Profile → API
-Tokens → Create Token**, with the *Email Routing Rules* edit permission scoped
-to the zone of your email domain.
-
-Mail storage and reading run on two Cloudflare Workers in [`workers/`](workers/):
-the Email Worker that stores mail in R2
-([setup](workers/email-worker/README.md)) and the messages API that serves it
-([setup](workers/messages-api/README.md), including the API token and base URL
-the two `MAILBOX_MCP_MESSAGES_API_*` variables expect).
-
-## Running locally
+## Deploying
 
 ```sh
-export MAILBOX_MCP_CLOUDFLARE_API_TOKEN=...
-export MAILBOX_MCP_DOMAIN=mail.example.com
-go run ./cmd/mailbox-mcp
+cd workers/mcp
+npm install
+npx wrangler secret put CLOUDFLARE_API_TOKEN
+npx wrangler secret put MCP_AUTH_TOKEN
+npm run deploy
 ```
 
-## Running with Docker
+The Email Worker deploys the same way from `workers/email-worker` (see its
+README for the R2 bucket setup).
 
-```sh
-docker build -t mailbox-mcp .
-docker run -i --rm \
-  -e MAILBOX_MCP_CLOUDFLARE_API_TOKEN=... \
-  -e MAILBOX_MCP_DOMAIN=mail.example.com \
-  mailbox-mcp
-```
-
-Or serve streamable HTTP from the container. Note the in-container address
-must be `0.0.0.0` for the port mapping to reach it, while the default
-`localhost` bind would not:
-
-```sh
-docker run --rm -p 8080:8080 \
-  -e MAILBOX_MCP_CLOUDFLARE_API_TOKEN=... \
-  -e MAILBOX_MCP_DOMAIN=mail.example.com \
-  -e MAILBOX_MCP_TRANSPORT=http \
-  -e MAILBOX_MCP_HTTP_ADDR=0.0.0.0:8080 \
-  mailbox-mcp
-```
-
-## Transports
-
-The MCP server supports two transports: `stdio` (the default; what locally
-launched clients want) and `http` (streamable HTTP at `/mcp`, for running
-the server once and connecting several clients to it as a remote server).
-The SSE transport is deliberately not supported: it is deprecated in the
-MCP specification.
-
-The MCP server itself has no authentication, so the HTTP transport binds to
-localhost by default. Exposing it to other hosts (via `MAILBOX_MCP_HTTP_ADDR`
-or a port mapping) makes mailbox management and stored mail reachable by
-anyone who can reach the port — do that only on networks you trust.
+**Security note:** `/mcp` is protected only by the bearer token. Keep
+`MCP_AUTH_TOKEN` private; anyone holding it can manage mailboxes and read
+stored mail.
 
 ## Using from an MCP client
 
-Add the server to your MCP client configuration, for example:
+Add the server as a remote MCP server, e.g. in Cline's MCP settings or any
+client that supports remote servers:
 
 ```json
 {
   "mcpServers": {
     "mailbox-mcp": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm",
-        "-e", "MAILBOX_MCP_CLOUDFLARE_API_TOKEN",
-        "-e", "MAILBOX_MCP_DOMAIN=mail.example.com"],
-      "env": { "MAILBOX_MCP_CLOUDFLARE_API_TOKEN": "..." }
-    }
-  }
-}
-```
-
-Or run it once with the HTTP transport and add it as a remote server:
-
-```json
-{
-  "mcpServers": {
-    "mailbox-mcp": {
-      "url": "http://localhost:8080/mcp"
+      "url": "https://mailbox-mcp.<account>.workers.dev/mcp",
+      "headers": { "Authorization": "Bearer <MCP_AUTH_TOKEN>" }
     }
   }
 }
@@ -146,11 +102,14 @@ Or run it once with the HTTP transport and add it as a remote server:
 
 ## Development
 
+Each worker is its own TypeScript project with vitest tests and `tsc` type
+checking:
+
 ```sh
-go build ./...
-go test ./...
-go vet ./...
+cd workers/mcp && npm install && npm test && npm run typecheck
+cd workers/email-worker && npm install && npm test && npm run typecheck
 ```
 
-See [AGENTS.md](AGENTS.md) for how work is planned and landed in this
+See [DEVELOPING.md](DEVELOPING.md) for the full runbook and
+[AGENTS.md](AGENTS.md) for how work is planned and landed in this
 repository.
