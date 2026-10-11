@@ -7,12 +7,33 @@ reading and managing the messages those mailboxes receive. See
 
 ## 1. Set up Cloudflare
 
-1. **Domain on Cloudflare.** The email domain must be a zone in your Cloudflare
+1. **Wrangler.** Install Cloudflare's CLI and log in — both workers below are
+   deployed with it:
+
+   ```sh
+   npm install -g wrangler
+   wrangler login
+   ```
+
+   `wrangler login` opens a browser for the Cloudflare OAuth flow; approve it
+   to grant the CLI access to your account. Check it worked with:
+
+   ```sh
+   wrangler whoami
+   ```
+
+   It should print your account. All `wrangler` commands below (`npm run
+   deploy`, `wrangler secret put`) use this login — no separate API token is
+   needed for deployments. If you prefer not to install globally, skip the
+   install and run the commands as `npx wrangler ...` instead; npm downloads
+   the CLI on first use (and the worker directories pin wrangler as a dev
+   dependency, so `npm run deploy` inside them uses the pinned version).
+2. **Domain on Cloudflare.** The email domain must be a zone in your Cloudflare
    account (nameservers pointed at Cloudflare).
-2. **Enable Email Routing.** Dashboard → your domain → **Email → Email Routing**
+3. **Enable Email Routing.** Dashboard → your domain → **Email → Email Routing**
    → enable. Cloudflare adds the required MX and SPF records. A catch-all rule
    is optional and can be disabled; mailbox-mcp manages individual rules.
-3. **Email Worker.** Email Routing rules can only point to workers that exist
+4. **Email Worker.** Email Routing rules can only point to workers that exist
    in your account, so create the R2 bucket and deploy the in-repo Email
    Worker first:
 
@@ -23,7 +44,7 @@ reading and managing the messages those mailboxes receive. See
 
    (Storage layout and deployment details:
    [workers/email-worker/README.md](workers/email-worker/README.md).)
-4. **Messages API.** Deploy the messages API worker, set its API token, and
+5. **Messages API.** Deploy the messages API worker, set its API token, and
    expose it on a URL the MCP server can reach:
 
    ```sh
@@ -34,20 +55,22 @@ reading and managing the messages those mailboxes receive. See
    Then create a route/custom domain for it (dashboard: Workers & Pages →
    mailbox-mcp-messages-api → Settings → Domains & Routes). Details:
    [workers/messages-api/README.md](workers/messages-api/README.md).
-5. **API token.** My Profile → **API Tokens → Create Token → Custom token**:
+6. **API token.** My Profile → **API Tokens → Create Token → Custom token**:
    permission **Zone → Email Routing Rules → Edit**, zone resources limited to
-   your email domain's zone. Copy the token value — it is shown once.
+   your email domain's zone. Copy the token value — it is shown once. This
+   token is for the MCP server's Email Routing calls; wrangler deployments
+   from step 1's login do not use it.
 
 ## 2. Configure and run the MCP server
 
 | Variable | Required | Example |
 |---|---|---|
-| `MAILBOX_MCP_CLOUDFLARE_API_TOKEN` | yes | the token from step 5 |
+| `MAILBOX_MCP_CLOUDFLARE_API_TOKEN` | yes | the token from step 6 |
 | `MAILBOX_MCP_DOMAIN` | yes | `mail.example.com` |
 | `MAILBOX_MCP_EMAIL_WORKER` | no (default `mailbox-mcp-email-worker`) | — |
 | `MAILBOX_MCP_TRANSPORT` | no (default `stdio`) | — |
 | `MAILBOX_MCP_MESSAGES_API_URL` | yes | `https://messages.example.com` |
-| `MAILBOX_MCP_MESSAGES_API_TOKEN` | yes | the token from step 4 |
+| `MAILBOX_MCP_MESSAGES_API_TOKEN` | yes | the token from step 5 |
 
 Locally:
 
