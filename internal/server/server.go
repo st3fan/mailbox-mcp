@@ -7,7 +7,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/st3fan/mailbox-mcp/internal/cloudflare"
 	"github.com/st3fan/mailbox-mcp/internal/config"
+	"github.com/st3fan/mailbox-mcp/internal/mailboxes"
 )
 
 const (
@@ -16,7 +18,9 @@ const (
 )
 
 // Run builds the MCP server from the given configuration and serves it until
-// the transport closes. Only the stdio transport is supported.
+// the transport closes. It resolves the configured domain to a Cloudflare zone
+// before serving, so a misconfigured domain fails fast at startup. Only the
+// stdio transport is supported.
 func Run(cfg config.Config) error {
 	switch cfg.Transport {
 	case config.TransportStdio:
@@ -24,9 +28,16 @@ func Run(cfg config.Config) error {
 		return fmt.Errorf("unsupported transport %q", cfg.Transport)
 	}
 
+	ctx := context.Background()
+
+	client := cloudflare.New(cfg.CloudflareAPIToken)
+	zoneID, err := client.ResolveZone(ctx, cfg.Domain)
+	if err != nil {
+		return err
+	}
+
 	srv := mcp.NewServer(&mcp.Implementation{Name: name, Version: version}, nil)
+	mailboxes.Register(srv, cfg, zoneID, client)
 
-	// Mailbox tools are registered in a later layer of the stack.
-
-	return srv.Run(context.Background(), &mcp.StdioTransport{})
+	return srv.Run(ctx, &mcp.StdioTransport{})
 }
