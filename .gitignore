@@ -7,3 +7,6 @@
 *.test
 *.out
 coverage.txt
+
+# Worker dependencies (installed locally with npm)
+workers/*/node_modules/
