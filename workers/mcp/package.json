@@ -7,7 +7,24 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "deploy": "wrangler deploy"
+    "db:migrations:apply": "wrangler d1 migrations apply REGISTRY --remote",
+    "deploy": "npm run db:migrations:apply && wrangler deploy"
+  },
+  "cloudflare": {
+    "bindings": {
+      "DOMAIN": {
+        "description": "Your **dedicated** email domain onboarded to Cloudflare Email Routing (e.g. `example.com`). Mail to every address on it is routed to this Worker."
+      },
+      "MCP_AUTH_TOKEN": {
+        "description": "Bearer token MCP clients must present at `/mcp`. Generate a random string using `openssl rand -hex 32`."
+      },
+      "MAILBOX_STORE": {
+        "description": "R2 bucket where received mail is stored (provisioned automatically)."
+      },
+      "REGISTRY": {
+        "description": "D1 database holding the mailbox registry (provisioned automatically; the schema is applied by the deploy script)."
+      }
+    }
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.3.1",
