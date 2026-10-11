@@ -12,15 +12,16 @@ messages is not implemented yet — see [PRODUCT.md](PRODUCT.md) for scope.
    → enable. Cloudflare adds the required MX and SPF records. A catch-all rule
    is optional and can be disabled; mailbox-mcp manages individual rules.
 3. **Email Worker.** Email Routing rules can only point to workers that exist
-   in your account, so create a Worker named `mailbox-mcp-email-worker` first.
-   For now a placeholder is fine:
+   in your account, so create the R2 bucket and deploy the in-repo Email
+   Worker first:
 
    ```sh
-   npm create cloudflare@latest -- mailbox-mcp-email-worker --type=hello-world
-   cd mailbox-mcp-email-worker && npx wrangler deploy
+   npx wrangler r2 bucket create mailbox-mcp-mailbox-store
+   cd workers/email-worker && npm install && npm run deploy
    ```
 
-   (The real worker that stores mail in R2 comes in a later iteration.)
+   (Storage layout and deployment details:
+   [workers/email-worker/README.md](workers/email-worker/README.md).)
 4. **API token.** My Profile → **API Tokens → Create Token → Custom token**:
    permission **Zone → Email Routing Rules → Edit**, zone resources limited to
    your email domain's zone. Copy the token value — it is shown once.

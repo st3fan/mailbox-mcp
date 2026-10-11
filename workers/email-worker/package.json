@@ -1,0 +1,18 @@
+{
+  "name": "mailbox-mcp-email-worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cloudflare Email Worker that stores mail routed to mailbox-mcp mailboxes in R2.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20251001.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "wrangler": "^3.90.0"
+  }
+}
