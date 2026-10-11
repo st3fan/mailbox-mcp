@@ -1,0 +1,15 @@
+name = "mailbox-mcp-messages-api"
+main = "src/index.ts"
+compatibility_date = "2025-10-01"
+
+# Binds the same R2 bucket the email worker writes to. The API token is not
+# configured here; set it once with:
+#
+#   npx wrangler secret put MESSAGES_API_TOKEN
+#
+# Exposing the API (route/custom domain or wrangler dev) is up to the operator;
+# the MCP server is configured with the base URL via MAILBOX_MCP_MESSAGES_API_URL.
+
+[[r2_buckets]]
+binding = "MAILBOX_STORE"
+bucket_name = "mailbox-mcp-mailbox-store"
