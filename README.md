@@ -15,6 +15,7 @@ managing the mailbox**. It deliberately has no functionality to send email. See
 | Tool | Description |
 |---|---|
 | `create_mailbox` | Create a mailbox: an Email Routing rule routing the address to the Email Worker. |
+| `create_random_mailbox` | Create a mailbox with a generated address like `john.smith@domain`. |
 | `list_mailboxes` | List mailboxes managed by mailbox-mcp on the configured domain. |
 | `delete_mailbox` | Delete a mailbox by address. |
 | `enable_mailbox` | Re-activate a mailbox: mail to the address is routed again. |

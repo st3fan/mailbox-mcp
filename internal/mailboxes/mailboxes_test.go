@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -18,14 +19,16 @@ type fakeClient struct {
 	rules  []cloudflare.Rule
 	nextID int
 
-	listErr   error
-	createErr error
-	deleteErr error
-	updateErr error
+	listErr        error
+	createErr      error
+	createErrQueue []error
+	deleteErr      error
+	updateErr      error
 
 	createdAddresses []string
 	deletedRuleIDs   []string
 	updates          []update
+	createCalls      int
 }
 
 // update records one UpdateRuleStatus call.
@@ -42,8 +45,14 @@ func (f *fakeClient) ListRules(ctx context.Context, zoneID string) ([]cloudflare
 }
 
 func (f *fakeClient) CreateMailboxRule(ctx context.Context, zoneID, address, worker string) (*cloudflare.Rule, error) {
-	if f.createErr != nil {
-		return nil, f.createErr
+	f.createCalls++
+	err := f.createErr
+	if len(f.createErrQueue) > 0 {
+		err = f.createErrQueue[0]
+		f.createErrQueue = f.createErrQueue[1:]
+	}
+	if err != nil {
+		return nil, err
 	}
 	f.createdAddresses = append(f.createdAddresses, address)
 	f.nextID++
@@ -439,5 +448,83 @@ func TestDisableMailboxSurfacesCloudflareError(t *testing.T) {
 	_, err := call(t, disableMailbox(testConfig, testZone, client), disableInput{Address: "ada@mail.example.com"})
 	if err == nil || !strings.Contains(err.Error(), "something went wrong") {
 		t.Errorf("error = %v, want the Cloudflare error to be surfaced", err)
+	}
+}
+
+func TestCreateRandomMailbox(t *testing.T) {
+	localPart := regexp.MustCompile(`^[a-z]+\.[a-z]+$`)
+
+	client := &fakeClient{}
+	got, err := call(t, createRandomMailbox(testConfig, testZone, client), createRandomInput{})
+	if err != nil {
+		t.Fatalf("createRandomMailbox() error = %v, want nil", err)
+	}
+	if len(client.createdAddresses) != 1 {
+		t.Fatalf("created = %v, want exactly one address", client.createdAddresses)
+	}
+	address := client.createdAddresses[0]
+	if got.Address != address {
+		t.Errorf("Address = %q, want the created address %q", got.Address, address)
+	}
+	local, domain, found := strings.Cut(address, "@")
+	if !found {
+		t.Fatalf("created address %q has no @", address)
+	}
+	if domain != testConfig.Domain {
+		t.Errorf("created address domain = %q, want %q", domain, testConfig.Domain)
+	}
+	if !localPart.MatchString(local) {
+		t.Errorf("created local part = %q, want lowercase first.last", local)
+	}
+	if got.RuleID == "" || !got.Enabled {
+		t.Errorf("CreateRandomMailbox() = %+v, want a rule ID and enabled", got)
+	}
+}
+
+func TestCreateRandomMailboxRetriesOnDuplicate(t *testing.T) {
+	client := &fakeClient{
+		createErrQueue: []error{
+			errors.New("cloudflare: error 1004: address already exists"),
+			errors.New("cloudflare: error 1004: duplicate rule"),
+		},
+	}
+	got, err := call(t, createRandomMailbox(testConfig, testZone, client), createRandomInput{})
+	if err != nil {
+		t.Fatalf("createRandomMailbox() error = %v, want nil", err)
+	}
+	// Both duplicate errors were consumed and retried; only the successful
+	// create is recorded by the fake.
+	if len(client.createdAddresses) != 1 {
+		t.Errorf("created = %v, want exactly one successful create", client.createdAddresses)
+	}
+	if got.Address != client.createdAddresses[0] {
+		t.Errorf("Address = %q, want the successful address %q", got.Address, client.createdAddresses[0])
+	}
+}
+
+func TestCreateRandomMailboxGivesUpAfterMaxAttempts(t *testing.T) {
+	client := &fakeClient{
+		createErr: errors.New("cloudflare: error 1004: address already exists"),
+	}
+	_, err := call(t, createRandomMailbox(testConfig, testZone, client), createRandomInput{})
+	if err == nil {
+		t.Fatal("createRandomMailbox() = nil error, want exhausted-attempts error")
+	}
+	if !strings.Contains(err.Error(), "no unique random mailbox after 3 attempts") {
+		t.Errorf("error = %q, want the exhausted-attempts message", err.Error())
+	}
+	if client.createCalls != maxRandomCreateAttempts {
+		t.Errorf("made %d create attempts, want %d", client.createCalls, maxRandomCreateAttempts)
+	}
+}
+
+func TestCreateRandomMailboxSurfacesNonDuplicateErrors(t *testing.T) {
+	client := &fakeClient{createErr: errors.New("cloudflare: error 9109: Unauthorized")}
+	_, err := call(t, createRandomMailbox(testConfig, testZone, client), createRandomInput{})
+	if err == nil || !strings.Contains(err.Error(), "Unauthorized") {
+		t.Errorf("error = %v, want the Cloudflare error to be surfaced without retries", err)
+	}
+	if len(client.createdAddresses) != 0 {
+		t.Errorf("created = %v, want a single attempt with no successful creates", client.createdAddresses)
 	}
 }
