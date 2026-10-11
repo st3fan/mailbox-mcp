@@ -6,8 +6,8 @@ development decisions: work is planned in GitHub issues derived from this docume
 ## What it is
 
 mailbox-mcp is an MCP server that sits on top of Cloudflare's Email Routing
-functionality. With a domain that is onboarded to that service, it can create and
-delete mailboxes.
+functionality. With a domain that is onboarded to that service, it can create,
+list, enable/disable, and delete mailboxes.
 
 A mailbox is a routing rule that sends email to an Email Worker called
 `mailbox-mcp-email-worker`. The Email Worker stores the email in R2.
@@ -27,10 +27,11 @@ The project has two parts:
    transport is deliberately not supported; the stdio transport went away with
    the self-hosted server.
 
-For mailbox management (creating and deleting mailboxes), the MCP server talks
-directly to Cloudflare's Email Routing API using a scoped API token; no
-Cloudflare-side component is involved. A dedicated API on the Cloudflare side will be
-introduced in a later iteration, when the MCP needs to read messages stored in R2.
+For mailbox management (creating and deleting mailboxes), the MCP worker talks
+directly to Cloudflare's Email Routing API using a scoped API token. For reading
+and managing messages, it reads and writes the R2-stored mail directly — an
+earlier iteration used a dedicated messages API worker for that, which has since
+been absorbed into the MCP worker because the MCP server is its only consumer.
 
 ## Scope
 
