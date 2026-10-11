@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import type { Env } from "./env";
 import { INSTRUCTIONS, mailboxSummaryPrompt, temporaryEmailPrompt, verificationCodePrompt } from "./guidance";
+import { registerMailboxTools } from "./mailbox-tools";
 import { registerMessageTools } from "./message-tools";
 
 export const SERVER_NAME = "mailbox-mcp";
@@ -57,6 +58,7 @@ export function buildServer(env: Env): McpServer {
   );
 
   registerMessageTools(server, env);
+  registerMailboxTools(server, env);
 
   return server;
 }
