@@ -40,6 +40,21 @@ function registry() {
   return (env.REGISTRY as unknown as FakeD1).rows;
 }
 
+/** putMessage stores a message's raw and metadata objects in the fake bucket,
+ * like the email worker does. */
+async function putMessage(mailbox: string, id: string, subject: string, raw: string) {
+  const bucket = env.MAILBOX_STORE as unknown as FakeR2Bucket;
+  await bucket.put(`${mailbox}/${id}.eml`, raw);
+  await bucket.put(
+    `${mailbox}/${id}.json`,
+    JSON.stringify({
+      id, mailbox, from: "sender@example.com", to: mailbox, subject,
+      receivedAt: "2026-01-01T00:00:00.000Z", size: raw.length, read: false, archived: false,
+    }),
+    { httpMetadata: { contentType: "application/json" } },
+  );
+}
+
 beforeEach(() => {
   randomAddress.mockReset();
   (env.REGISTRY as unknown as FakeD1).rows.clear();
@@ -113,13 +128,21 @@ describe("list_mailboxes", () => {
 });
 
 describe("delete_mailbox", () => {
-  it("removes the registry entry", async () => {
+  it("removes the registry entry and all stored messages", async () => {
     await callTool(11, "create_mailbox", { address: "alpha@outofscope.party" });
+    // Two messages for alpha, plus one for another mailbox that must survive.
+    await putMessage("alpha@outofscope.party", "1-a", "s", "raw one");
+    await putMessage("alpha@outofscope.party", "2-b", "s", "raw two");
+    await putMessage("beta@outofscope.party", "1-c", "s", "raw three");
 
     const { isError, text } = await callTool(12, "delete_mailbox", { address: "alpha@outofscope.party" });
     expect(isError).toBe(false);
     expect(JSON.parse(text)).toEqual({ address: "alpha@outofscope.party", deleted: true });
     expect(registry().has("alpha@outofscope.party")).toBe(false);
+
+    const bucket = env.MAILBOX_STORE as unknown as FakeR2Bucket;
+    expect(bucket.keys().filter((k) => k.startsWith("alpha@outofscope.party/"))).toEqual([]);
+    expect(bucket.keys().filter((k) => k.startsWith("beta@outofscope.party/"))).toHaveLength(2);
   });
 
   it("404s unknown mailboxes", async () => {

@@ -9,6 +9,7 @@ import type { Env } from "./env";
 import { randomAddress } from "./names";
 import {
   createMailbox,
+  deleteAllMessages,
   deleteMailbox as registryDelete,
   listMailboxes,
   RegistryConflictError,
@@ -83,7 +84,7 @@ export function registerMailboxTools(server: McpServer, env: Env): void {
   server.registerTool(
     "delete_mailbox",
     {
-      description: `Delete a mailbox on ${env.DOMAIN}: the address is removed from the registry and no longer receives mail. Mail already stored for it remains in storage.`,
+      description: `Delete a mailbox on ${env.DOMAIN}: the address is removed from the registry, it no longer receives mail, and all of its stored messages are permanently deleted.`,
       inputSchema: {
         address: z.string().describe("the mailbox address to delete"),
       },
@@ -91,6 +92,7 @@ export function registerMailboxTools(server: McpServer, env: Env): void {
     async ({ address }) => {
       const mailbox = validateAddress(address, env);
       await registryDelete(env.REGISTRY, mailbox);
+      await deleteAllMessages(env.MAILBOX_STORE, mailbox);
       return text({ address: mailbox, deleted: true });
     },
   );

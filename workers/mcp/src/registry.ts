@@ -75,9 +75,33 @@ export async function setMailboxEnabled(db: D1Database, address: string, enabled
   return (await getMailbox(db, address))!;
 }
 
+/** deleteMailboxStorage permanently deletes every stored message of a
+ * mailbox: all `.eml` and `.json` objects under its prefix, across all R2
+ * list pages. */
+export async function deleteAllMessages(bucket: R2Bucket, mailbox: string): Promise<number> {
+  const prefix = `${mailbox}/`;
+  let deleted = 0;
+  let cursor: string | undefined;
+  // Bound the internal paging so a huge mailbox cannot make one request run
+  // unbounded; callers can simply call again to continue.
+  for (let pages = 0; pages < 100; pages++) {
+    const page: R2Objects = await bucket.list({ prefix, cursor, limit: 1000 });
+    const keys = page.objects.map((o) => o.key);
+    if (keys.length > 0) {
+      await bucket.delete(keys);
+      deleted += keys.length;
+    }
+    if (!page.truncated) {
+      return deleted;
+    }
+    cursor = page.cursor;
+  }
+  return deleted;
+}
+
 /** deleteMailbox removes the registry entry. Throws when the mailbox does not
- * exist. Stored R2 mail is left in place — deleting the mailbox is about the
- * address, not its history. */
+ * exist. The delete_mailbox tool also purges the mailbox's stored R2
+ * messages on top of this. */
 export async function deleteMailbox(db: D1Database, address: string): Promise<void> {
   const res = await db.prepare("DELETE FROM mailboxes WHERE address = ?").bind(address).run();
   if ((res.meta?.changes ?? 0) === 0) {
