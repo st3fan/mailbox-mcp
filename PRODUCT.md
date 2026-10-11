@@ -24,7 +24,10 @@ The project has two parts:
 2. **MCP server** — a self-hosted MCP server that you can run anywhere. It talks to
    the Cloudflare side using an API key.
 
-On the Cloudflare side an API is exposed that the MCP can talk to.
+For mailbox management (creating and deleting mailboxes), the MCP server talks
+directly to Cloudflare's Email Routing API using a scoped API token; no
+Cloudflare-side component is involved. A dedicated API on the Cloudflare side will be
+introduced in a later iteration, when the MCP needs to read messages stored in R2.
 
 ## Scope
 
