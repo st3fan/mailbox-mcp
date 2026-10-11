@@ -72,24 +72,18 @@ reading and managing the messages those mailboxes receive. See
 | `MAILBOX_MCP_MESSAGES_API_URL` | yes | `https://messages.example.com` |
 | `MAILBOX_MCP_MESSAGES_API_TOKEN` | yes | the token from step 5 |
 
-Locally:
+Locally — either export the variables from the table above, or keep a `.env`
+file in the repo root (gitignored) and let the server read it itself:
 
 ```sh
-export MAILBOX_MCP_CLOUDFLARE_API_TOKEN=...
-export MAILBOX_MCP_DOMAIN=mail.example.com
-export MAILBOX_MCP_MESSAGES_API_URL=https://messages.example.com
-export MAILBOX_MCP_MESSAGES_API_TOKEN=...
 go run ./cmd/mailbox-mcp
 ```
 
-Or via Docker:
+Or via Docker — mount a `.env` into the container's working directory:
 
 ```sh
 docker build -t mailbox-mcp .
-docker run -i --rm -e MAILBOX_MCP_CLOUDFLARE_API_TOKEN=... \
-  -e MAILBOX_MCP_DOMAIN=mail.example.com \
-  -e MAILBOX_MCP_MESSAGES_API_URL=... \
-  -e MAILBOX_MCP_MESSAGES_API_TOKEN=... mailbox-mcp
+docker run -i --rm -v "$PWD/.env:/.env:ro" mailbox-mcp
 ```
 
 The server fails fast at startup if the token/domain is missing or the domain
@@ -118,8 +112,14 @@ Add the server to Cline's MCP settings (Cline → MCP Servers icon →
 }
 ```
 
-To use the Docker image instead, set `"command": "docker"` with `"args"` adding
-`-e MAILBOX_MCP_MESSAGES_API_URL` and `-e MAILBOX_MCP_MESSAGES_API_TOKEN`.
+If the server is launched with the repository as its working directory, the
+`env` block can be omitted entirely: the server reads `.env` from its working
+directory itself.
+
+To use the Docker image instead, set `"command": "docker"` and mount a `.env`
+file (the container's working directory is `/`):
+
+`"args": ["run", "-i", "--rm", "-v", "/absolute/path/to/.env:/.env:ro", "mailbox-mcp"]`.
 
 Save, then hit **Refresh** in the MCP Servers panel; `mailbox-mcp` should show
 the eleven tools (`create_mailbox`, `create_random_mailbox`, `list_mailboxes`,
