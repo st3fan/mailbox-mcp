@@ -1,0 +1,24 @@
+name = "mailbox-mcp"
+main = "src/index.ts"
+compatibility_date = "2025-10-01"
+
+# The MCP worker serves streamable HTTP at /mcp and owns message storage
+# (the MAILBOX_STORE R2 binding, shared with the email worker). Mail
+# ingestion lives in workers/email-worker.
+#
+# Secrets (set once with wrangler secret put <NAME>):
+#   CLOUDFLARE_API_TOKEN  Email Routing rules token for DOMAIN (what the Go
+#                         server called MAILBOX_MCP_CLOUDFLARE_API_TOKEN)
+#   MCP_AUTH_TOKEN        bearer token MCP clients must present
+#
+# Exposing the endpoint beyond localhost-style use is an operator decision:
+# every client that can reach /mcp with the token can manage mailboxes and
+# read stored mail.
+
+[vars]
+DOMAIN = "outofscope.party"
+EMAIL_WORKER = "mailbox-mcp-email-worker"
+
+[[r2_buckets]]
+binding = "MAILBOX_STORE"
+bucket_name = "mailbox-mcp-mailbox-store"
