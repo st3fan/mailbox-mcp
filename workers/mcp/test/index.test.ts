@@ -82,12 +82,15 @@ describe("mcp", () => {
     }
   });
 
-  it("has no tools yet in the foundation layer and lists three prompts", async () => {
-    // No tools are registered in this layer, so the tools capability is not
-    // declared and tools/list is a protocol-level Method not found. Layer 2
-    // replaces this assertion with the real tool list.
+  it("lists the eleven tools and three prompts", async () => {
     const tools = await rpc(2, "tools/list");
-    expect(tools.data.error).toMatchObject({ code: -32601, message: "Method not found" });
+    expect(tools.data.result.tools.map((tool: { name: string }) => tool.name).sort())
+      .toEqual([
+        "archive_message", "create_mailbox", "create_random_mailbox",
+        "delete_mailbox", "delete_message", "disable_mailbox",
+        "enable_mailbox", "list_mailboxes", "list_messages",
+        "mark_message_read", "read_message",
+      ]);
 
     const prompts = await rpc(3, "prompts/list");
     expect(prompts.data.result.prompts.map((p: { name: string }) => p.name).sort())

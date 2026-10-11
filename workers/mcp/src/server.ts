@@ -1,10 +1,12 @@
-// Builds the MCP server: instructions and prompts now, tools in later layers.
+// Builds the MCP server: instructions, prompts, and tools.
 
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 
 import type { Env } from "./env";
 import { INSTRUCTIONS, mailboxSummaryPrompt, temporaryEmailPrompt, verificationCodePrompt } from "./guidance";
+import { registerMailboxTools } from "./mailbox-tools";
+import { registerMessageTools } from "./message-tools";
 
 export const SERVER_NAME = "mailbox-mcp";
 export const SERVER_VERSION = "0.1.0";
@@ -54,6 +56,9 @@ export function buildServer(env: Env): McpServer {
       messages: [{ role: "user", content: { type: "text", text: mailboxSummaryPrompt(address) } }],
     }),
   );
+
+  registerMessageTools(server, env);
+  registerMailboxTools(server, env);
 
   return server;
 }
