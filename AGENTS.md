@@ -4,12 +4,13 @@ Guidance for AI agents (and humans) working in this repository.
 
 ## Project overview
 
-- **Language:** TypeScript on Cloudflare Workers. The project is two Workers
-  — `workers/mcp` (the MCP endpoint + message storage) and
-  `workers/email-worker` (mail ingestion into R2) — each with its own
+- **Language:** TypeScript on Cloudflare Workers. The project is one Worker
+  — `workers/mcp` — with two entry points: the MCP endpoint + message
+  storage (`fetch`) and mail ingestion into R2 (`email`). It has its own
   package, vitest tests, and `tsc` type checking. Follow the style of the
-  existing worker code.
-- **Packaging:** Workers deploy with `wrangler deploy` per worker directory.
+  existing code.
+- **Packaging:** The Worker deploys with `wrangler deploy` from its
+  directory (the deploy script also applies D1 migrations).
   Configuration lives in wrangler vars and secrets, not environment files.
 
 ## Planning work
@@ -52,10 +53,9 @@ Guidance for AI agents (and humans) working in this repository.
 
 ## Verifying changes
 
-- Test and type-check before submitting a PR, for every worker you touched:
+- Test and type-check before submitting a PR:
   ```bash
   cd workers/mcp && npm test && npm run typecheck
-  cd workers/email-worker && npm test && npm run typecheck
   ```
   Both must be clean. When a change affects a deployed worker, deploy it to
   verify before requesting review.

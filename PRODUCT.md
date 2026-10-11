@@ -10,8 +10,8 @@ functionality. With a (dedicated) domain that is onboarded to that service,
 it can create, list, enable/disable, and delete mailboxes.
 
 A mailbox is an entry in a D1 mailbox registry. A single catch-all routing
-rule sends all of the domain's email to an Email Worker called
-`mailbox-mcp-email-worker`, which accepts mail for registered, enabled
+rule sends all of the domain's email to the mailbox-mcp Worker, whose email
+handler accepts mail for registered, enabled
 mailboxes and stores it in R2, bouncing everything else.
 
 The MCP also has methods to read the mailbox, read messages, mark messages as read,
@@ -19,11 +19,12 @@ delete and archive messages. This is enough functionality.
 
 ## Architecture
 
-The project has two parts:
+The project is a single Cloudflare Worker with two entry points:
 
-1. **Email Worker on Cloudflare** — receives email routed by Email Routing rules and
-   stores it in R2.
-2. **MCP server** — a Cloudflare Worker (`workers/mcp`) serving MCP as streamable
+1. **Email ingestion (`email` handler)** — receives mail routed by the
+   catch-all rule, checks the mailbox registry, and accepts and stores it in
+   R2, bouncing everything else.
+2. **MCP server (`fetch` handler)** — serves MCP as streamable
    HTTP at `/mcp` with bearer-token auth. It owns the mailbox registry (D1) and
    message storage (R2). The deprecated SSE transport is deliberately not
    supported; the stdio transport went away with the self-hosted server.
@@ -31,8 +32,9 @@ The project has two parts:
 Mailbox management is pure registry bookkeeping: creating, listing,
 enabling/disabling, and deleting mailboxes touches only the D1 registry, so
 **no Cloudflare API token is involved anywhere**. Incoming mail is routed by
-a single catch-all rule (configured once, by hand) to the Email Worker,
-which consults the registry and bounces unknown or disabled addresses. The
+a single catch-all rule (configured once, by hand) to the Worker, whose
+email handler consults the registry and bounces unknown or disabled
+addresses. The
 registry model also removes the routing-rule activation delay: a freshly
 created mailbox receives mail immediately.
 
