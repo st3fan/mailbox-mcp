@@ -66,7 +66,7 @@ The MCP worker is configured with wrangler vars, secrets, and bindings:
 
 | Binding | Kind | Meaning |
 |---|---|---|
-| `DOMAIN` | var | The single (dedicated) email domain to manage, e.g. `outofscope.party`. |
+| `DOMAIN` | var | The single (dedicated) email domain to manage, e.g. `example.com`. |
 | `MAILBOX_STORE` | R2 binding | The bucket the Worker stores received mail in. |
 | `REGISTRY` | D1 binding | The mailbox registry. |
 | `MCP_AUTH_TOKEN` | secret | Bearer token MCP clients must present at `/mcp`. |

@@ -9,7 +9,7 @@ const TOKEN = "test-mcp-token";
 const env: Env = {
   MAILBOX_STORE: new FakeR2Bucket() as unknown as R2Bucket,
   REGISTRY: new FakeD1() as unknown as D1Database,
-  DOMAIN: "outofscope.party",
+  DOMAIN: "example.com",
   MCP_AUTH_TOKEN: TOKEN,
 };
 const ctx = { waitUntil: () => {}, passThroughOnException: () => {} } as unknown as ExecutionContext;
@@ -50,34 +50,34 @@ beforeEach(() => {
 
 describe("list_messages", () => {
   it("lists messages newest first and never marks read", async () => {
-    await putMessage("alice@outofscope.party", "2-old", "old", "r1");
-    await putMessage("alice@outofscope.party", "1-new", "new", "r2");
+    await putMessage("alice@example.com", "2-old", "old", "r1");
+    await putMessage("alice@example.com", "1-new", "new", "r2");
 
-    const { isError, text } = await callTool(1, "list_messages", { address: "alice@outofscope.party" });
+    const { isError, text } = await callTool(1, "list_messages", { address: "alice@example.com" });
     expect(isError).toBe(false);
     const out = JSON.parse(text);
     expect(out.messages.map((m: { id: string }) => m.id)).toEqual(["1-new", "2-old"]);
     expect(out.nextPageToken).toBeUndefined();
     // Listing is side-effect free: metadata objects unchanged.
     const bucket = env.MAILBOX_STORE as unknown as FakeR2Bucket;
-    const meta = JSON.parse(new TextDecoder().decode((await bucket.get("alice@outofscope.party/1-new.json"))!.body));
+    const meta = JSON.parse(new TextDecoder().decode((await bucket.get("alice@example.com/1-new.json"))!.body));
     expect(meta.read).toBe(false);
   });
 
   it("rejects off-domain addresses locally", async () => {
     const { isError, text } = await callTool(2, "list_messages", { address: "alice@elsewhere.example" });
     expect(isError).toBe(true);
-    expect(text).toContain("is not a mailbox on outofscope.party");
+    expect(text).toContain("is not a mailbox on example.com");
     expect((env.MAILBOX_STORE as unknown as FakeR2Bucket).objects.size).toBe(0);
   });
 });
 
 describe("read_message", () => {
   it("returns metadata and raw content and marks read", async () => {
-    await putMessage("alice@outofscope.party", "1-a", "Hello", "raw body");
+    await putMessage("alice@example.com", "1-a", "Hello", "raw body");
 
     const { isError, text } = await callTool(3, "read_message", {
-      address: "alice@outofscope.party", id: "1-a",
+      address: "alice@example.com", id: "1-a",
     });
     expect(isError).toBe(false);
     const out = JSON.parse(text);
@@ -87,22 +87,22 @@ describe("read_message", () => {
 
     // The flag change is persisted in the bucket.
     const bucket = env.MAILBOX_STORE as unknown as FakeR2Bucket;
-    const meta = JSON.parse(new TextDecoder().decode((await bucket.get("alice@outofscope.party/1-a.json"))!.body));
+    const meta = JSON.parse(new TextDecoder().decode((await bucket.get("alice@example.com/1-a.json"))!.body));
     expect(meta.read).toBe(true);
   });
 
   it("404s unknown messages", async () => {
     const { isError, text } = await callTool(4, "read_message", {
-      address: "alice@outofscope.party", id: "9-z",
+      address: "alice@example.com", id: "9-z",
     });
     expect(isError).toBe(true);
-    expect(text).toContain('message "9-z" not found in "alice@outofscope.party"');
+    expect(text).toContain('message "9-z" not found in "alice@example.com"');
   });
 
   it("requires an id", async () => {
-    await putMessage("alice@outofscope.party", "1-a", "s", "raw");
+    await putMessage("alice@example.com", "1-a", "s", "raw");
     const { isError, text } = await callTool(5, "read_message", {
-      address: "alice@outofscope.party", id: " ",
+      address: "alice@example.com", id: " ",
     });
     expect(isError).toBe(true);
     expect(text).toContain("id is required");
@@ -111,19 +111,19 @@ describe("read_message", () => {
 
 describe("mark_message_read and archive_message", () => {
   it("mark flags without touching other fields", async () => {
-    await putMessage("alice@outofscope.party", "1-a", "s", "raw");
+    await putMessage("alice@example.com", "1-a", "s", "raw");
 
-    const read = await callTool(6, "mark_message_read", { address: "alice@outofscope.party", id: "1-a" });
+    const read = await callTool(6, "mark_message_read", { address: "alice@example.com", id: "1-a" });
     expect(read.isError).toBe(false);
     expect(JSON.parse(read.text).message).toMatchObject({ read: true, archived: false });
 
-    const archive = await callTool(7, "archive_message", { address: "alice@outofscope.party", id: "1-a" });
+    const archive = await callTool(7, "archive_message", { address: "alice@example.com", id: "1-a" });
     expect(archive.isError).toBe(false);
     expect(JSON.parse(archive.text).message).toMatchObject({ read: true, archived: true });
   });
 
   it("404 unknown messages", async () => {
-    const read = await callTool(8, "mark_message_read", { address: "alice@outofscope.party", id: "9-z" });
+    const read = await callTool(8, "mark_message_read", { address: "alice@example.com", id: "9-z" });
     expect(read.isError).toBe(true);
     expect(read.text).toContain("not found");
   });
@@ -131,14 +131,14 @@ describe("mark_message_read and archive_message", () => {
 
 describe("delete_message", () => {
   it("deletes both objects and then 404s", async () => {
-    await putMessage("alice@outofscope.party", "1-a", "s", "raw");
+    await putMessage("alice@example.com", "1-a", "s", "raw");
 
-    const del = await callTool(9, "delete_message", { address: "alice@outofscope.party", id: "1-a" });
+    const del = await callTool(9, "delete_message", { address: "alice@example.com", id: "1-a" });
     expect(del.isError).toBe(false);
     expect(JSON.parse(del.text)).toEqual({ deleted: true });
     expect((env.MAILBOX_STORE as unknown as FakeR2Bucket).objects.size).toBe(0);
 
-    const again = await callTool(10, "delete_message", { address: "alice@outofscope.party", id: "1-a" });
+    const again = await callTool(10, "delete_message", { address: "alice@example.com", id: "1-a" });
     expect(again.isError).toBe(true);
     expect(again.text).toContain("not found");
   });
